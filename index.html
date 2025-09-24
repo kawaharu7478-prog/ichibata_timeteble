@@ -2,197 +2,125 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>列車運行アニメーション</title>
-  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <title>列車走行位置表示</title>
   <style>
-    body { font-family: sans-serif; }
+    body { font-family: Arial, sans-serif; text-align: center; }
+    #time { font-size: 20px; margin-bottom: 20px; }
+    svg { border: 1px solid #ccc; background: #f9f9f9; }
     .station { font-size: 12px; text-anchor: middle; }
-    .time-label { font-size: 18px; font-weight: bold; }
+    .train { font-size: 12px; font-weight: bold; }
   </style>
 </head>
 <body>
-  <svg id="map" width="1600" height="900"></svg>
+  <div id="time"></div>
+  <svg id="map" width="1600" height="500"></svg>
 
+  <script src="https://d3js.org/d3.v7.min.js"></script>
   <script>
+    const mainStations = ["松江温泉","ガーデン前","朝日ヶ丘","長江","秋鹿町","フォーゲル","高ノ宮","津ノ森","伊野灘","一畑口","園","湖遊館新駅","布崎","雲州平田","旅伏","美談","大寺","川跡","武志","大津町","科学館前","電鉄出雲市"];
+    const branchStations = ["川跡.1","高浜","遥堪","浜山公園北口","出雲大社前"];
+
     const svg = d3.select("#map");
-    const width = +svg.attr("width");
-    const height = +svg.attr("height");
+    const spacing = 60; // 駅間隔
+    const offsetY = 100;
 
-    // 駅リスト（本線）
-    const mainStations = [
-      "松江温泉","ガーデン前","朝日ヶ丘","長江","秋鹿町","フォーゲル","高ノ宮","津ノ森","伊野灘",
-      "一畑口","園","湖遊館新駅","布崎","雲州平田","旅伏","美談","大寺","川跡",
-      "武志","大津町","科学館前","電鉄出雲市"
-    ];
-
-    // 支線
-    const branchStations = ["川跡","高浜","遥堪","浜山公園北口","出雲大社前"];
-
-    // レイアウト設定
-    const stationSpacing = 70;
-    const startX = 100;
-    const startY = 120;
-
-    // 本線座標
-    const stationPositions = {};
-    mainStations.forEach((name, i) => {
-      stationPositions[name] = {x: startX + i * stationSpacing, y: startY};
-    });
-
-    // 支線座標
-    const kawato = stationPositions["川跡"];
-    branchStations.forEach((name, i) => {
-      if (i === 0) {
-        stationPositions[name] = kawato;
-      } else {
-        stationPositions[name] = {
-          x: kawato.x + i * stationSpacing,
-          y: kawato.y + 150
-        };
-      }
-    });
-
-    // 路線描画
+    // 本線描画
     svg.append("line")
-      .attr("x1", stationPositions["松江温泉"].x)
-      .attr("y1", stationPositions["松江温泉"].y)
-      .attr("x2", stationPositions["電鉄出雲市"].x)
-      .attr("y2", stationPositions["電鉄出雲市"].y)
+      .attr("x1", 50).attr("y1", offsetY)
+      .attr("x2", 50 + (mainStations.length-1)*spacing).attr("y2", offsetY)
       .attr("stroke", "black");
 
-    svg.append("line")
-      .attr("x1", kawato.x)
-      .attr("y1", kawato.y)
-      .attr("x2", kawato.x)
-      .attr("y2", kawato.y + 150)
-      .attr("stroke", "black");
-
-    svg.append("line")
-      .attr("x1", stationPositions["高浜"].x)
-      .attr("y1", stationPositions["高浜"].y)
-      .attr("x2", stationPositions["出雲大社前"].x)
-      .attr("y2", stationPositions["出雲大社前"].y)
-      .attr("stroke", "black");
-
-    // 駅描画
-    Object.entries(stationPositions).forEach(([name, pos]) => {
-      svg.append("circle")
-        .attr("cx", pos.x)
-        .attr("cy", pos.y)
-        .attr("r", 5)
-        .attr("fill", "black");
-      svg.append("text")
-        .attr("x", pos.x)
-        .attr("y", pos.y - 10)
-        .attr("class", "station")
-        .text(name.replace(".1",""));
+    mainStations.forEach((s, i) => {
+      const x = 50 + i*spacing, y = offsetY;
+      svg.append("circle").attr("cx", x).attr("cy", y).attr("r", 5).attr("fill", "black");
+      svg.append("text").attr("x", x).attr("y", y-10).text(s).attr("class","station");
     });
 
-    // 列車色
-    function getTrainStyle(name) {
-      if (name.includes("A")) return {fill: "red", text: "white"};
-      if (name.includes("B")) return {fill: "green", text: "white"};
-      if (name.includes("C")) return {fill: "yellow", text: "black"};
-      if (name.includes("D")) return {fill: "blue", text: "black"};
-      if (name.includes("E")) return {fill: "none", text: "black"};
-      if (name.includes("F")) return {fill: "cyan", text: "black"};
-      if (name.includes("G")) return {fill: "orange", text: "white"};
-      if (name.includes("H")) return {fill: "pink", text: "black"};
-      if (name.includes("I")) return {fill: "lime", text: "black"};
-      return {fill: "gray", text: "white"};
-    }
+    // 支線（川跡駅の真下から垂直に下ろす）
+    const kawaX = 50 + (mainStations.indexOf("川跡"))*spacing;
+    const branchY = offsetY + 60;
+    svg.append("line").attr("x1", kawaX).attr("y1", offsetY).attr("x2", kawaX).attr("y2", branchY).attr("stroke", "black");
+    svg.append("line")
+      .attr("x1", kawaX).attr("y1", branchY)
+      .attr("x2", kawaX + (branchStations.length-1)*spacing).attr("y2", branchY)
+      .attr("stroke","black");
 
-    // 現在時刻表示
-    const timeLabel = svg.append("text")
-      .attr("x", width / 2)
-      .attr("y", 40)
-      .attr("class", "time-label")
-      .attr("text-anchor", "middle");
-
-    // 時刻を秒に変換
-    function timeToSeconds(hhmm) {
-      if (!hhmm) return null;
-      const s = String(hhmm).padStart(4, "0");
-      const hh = parseInt(s.slice(0,2));
-      const mm = parseInt(s.slice(2,4));
-      return hh * 3600 + mm * 60;
-    }
+    branchStations.forEach((s,i)=>{
+      const x = kawaX + i*spacing, y = branchY;
+      svg.append("circle").attr("cx",x).attr("cy",y).attr("r",5).attr("fill","black");
+      svg.append("text").attr("x",x).attr("y",y+20).text(s.replace(".1","")).attr("class","station");
+    });
 
     // CSV読み込み
-    d3.csv("trains.csv").then(data => {
-      const trains = data.map(d => ({
-        id: d.train_id,
-        name: d.train_name,
-        direction: d.direction,
-        times: Object.fromEntries(
-          Object.entries(d).filter(([k,v]) =>
-            k !== "train_id" && k !== "train_name" && k !== "direction" && v
-          )
-        )
-      }));
+    d3.csv("trains.csv").then(data=>{
+      data.forEach(d=>{ d.train_id=+d.train_id; });
 
-      function update() {
-        // 現在時刻（秒単位）
+      function parseTime(t){ if(!t) return null; const s=t.toString().padStart(4,"0"); return +s.slice(0,2)*60+ +s.slice(2,4); }
+
+      // 色判定
+      function trainColor(name){
+        if(name.includes("A")) return {fill:"red",text:"white"};
+        if(name.includes("B")) return {fill:"green",text:"white"};
+        if(name.includes("C")) return {fill:"yellow",text:"black"};
+        if(name.includes("D")) return {fill:"blue",text:"black"};
+        if(name.includes("E")) return {fill:"none",text:"black",stroke:"black"};
+        if(name.includes("F")) return {fill:"cyan",text:"black"};
+        if(name.includes("G")) return {fill:"orange",text:"white"};
+        if(name.includes("H")) return {fill:"pink",text:"black"};
+        if(name.includes("I")) return {fill:"lime",text:"black"};
+        return {fill:"gray",text:"white"};
+      }
+
+      const trains = svg.selectAll(".train")
+        .data(data).enter()
+        .append("g").attr("class","train");
+
+      trains.append("polygon").attr("points","0,0 20,10 0,20 -20,10").attr("stroke","black");
+      trains.append("text").attr("dy",".35em").attr("text-anchor","middle");
+
+      function updateTime(){
         const now = new Date();
-        const hh = now.getHours();
-        const mm = now.getMinutes();
-        const ss = now.getSeconds();
-        const currentSec = hh * 3600 + mm * 60 + ss;
+        const nowMin = now.getHours()*60 + now.getMinutes() + now.getSeconds()/60;
+        document.getElementById("time").innerText = now.toTimeString().split(" ")[0];
 
-        // 表示更新 (hh:mm:ss)
-        timeLabel.text(
-          `${hh.toString().padStart(2,"0")}:${mm.toString().padStart(2,"0")}:${ss.toString().padStart(2,"0")}`
-        );
+        trains.each(function(d){
+          const dir = d.direction;
+          const stations = dir==="up" ? mainStations.concat(branchStations.slice(1)) : mainStations.slice().reverse().concat(branchStations.slice(1).reverse());
+          let prev=null,next=null;
+          for(let s of stations){
+            const t=parseTime(d[s]);
+            if(!t) continue;
+            if(t<=nowMin) prev={s,t}; else { next={s,t}; break; }
+          }
+          if(!prev||!next){ d3.select(this).attr("display","none"); return; }
+          d3.select(this).attr("display",null);
 
-        svg.selectAll(".train").remove();
+          const pos=(nowMin-prev.t)/(next.t-prev.t);
+          function stationXY(st){
+            if(st.includes(".1")) return [kawaX+(branchStations.indexOf(st))*spacing, branchY];
+            return [50+mainStations.indexOf(st)*spacing, offsetY];
+          }
+          const [x1,y1]=stationXY(prev.s), [x2,y2]=stationXY(next.s);
+          const x=x1+(x2-x1)*pos, y=y1+(y2-y1)*pos;
 
-        trains.forEach(train => {
-          const stations = Object.keys(train.times);
-          let prev = null, next = null;
-
-          for (let i = 0; i < stations.length; i++) {
-            const t = timeToSeconds(train.times[stations[i]]);
-            if (t !== null && t <= currentSec) prev = {station: stations[i], time: t};
-            if (t !== null && t > currentSec && !next) next = {station: stations[i], time: t};
+          const size=30+d.train_name.length*6;
+          let points;
+          if(dir==="up"){
+            points=`${-size/2},-10 ${size/2},-10 ${size/2+10},0 ${size/2},10 ${-size/2},10`;
+          }else{
+            points=`${size/2},-10 ${-size/2},-10 ${-size/2-10},0 ${-size/2},10 ${size/2},10`;
           }
 
-          if (!prev || !next) return;
-
-          const p1 = stationPositions[prev.station];
-          const p2 = stationPositions[next.station];
-          if (!p1 || !p2) return;
-
-          const ratio = (currentSec - prev.time) / (next.time - prev.time);
-          const x = p1.x + (p2.x - p1.x) * ratio;
-          const y = p1.y + (p2.y - p1.y) * ratio + (train.direction === "up" ? -20 : 20);
-
-          const style = getTrainStyle(train.name);
-          const w = 20 + train.name.length * 8;
-          const h = 20;
-
-          // 矢羽根型ポリゴン
-          const points = train.direction === "up"
-            ? `${x-w/2},${y+h/2} ${x+w/2-5},${y+h/2} ${x+w/2},${y} ${x+w/2-5},${y-h/2} ${x-w/2},${y-h/2}`
-            : `${x-w/2+5},${y-h/2} ${x+w/2},${y-h/2} ${x+w/2},${y+h/2} ${x-w/2+5},${y+h/2} ${x-w/2},${y}`;
-
-          svg.append("polygon")
-            .attr("points", points)
-            .attr("fill", style.fill)
-            .attr("stroke", "black")
-            .attr("class", "train");
-
-          svg.append("text")
-            .attr("x", x)
-            .attr("y", y+4)
-            .attr("text-anchor", "middle")
-            .attr("fill", style.text)
-            .attr("font-size", "12px")
-            .attr("class", "train")
-            .text(train.name);
+          const g=d3.select(this);
+          const c=trainColor(d.train_name);
+          g.attr("transform",`translate(${x},${y+(dir==="up"?-20:20)})`);
+          g.select("polygon").attr("points",points).attr("fill",c.fill).attr("stroke",c.stroke||"black");
+          g.select("text").text(d.train_name).attr("fill",c.text);
         });
       }
 
-      setInterval(update, 1000);
+      updateTime();
+      setInterval(updateTime,1000);
     });
   </script>
 </body>
