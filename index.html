@@ -29,9 +29,9 @@
     const branchStations = ["川跡","高浜","遥堪","浜山公園北口","出雲大社前"];
 
     // レイアウト設定
-    const stationSpacing = 60;   // 駅間隔（広げた）
+    const stationSpacing = 70;   // 駅間隔（少し広く）
     const startX = 100;
-    const startY = 100;
+    const startY = 120;
 
     // 本線の座標
     const stationPositions = {};
@@ -39,19 +39,21 @@
       stationPositions[name] = {x: startX + i * stationSpacing, y: startY};
     });
 
-    // 支線の座標（川跡から下に伸ばし、右に寄せて平行配置）
+    // 支線の座標
+    const kawato = stationPositions["川跡"];
     branchStations.forEach((name, i) => {
       if (i === 0) {
-        stationPositions[name] = stationPositions[name]; // 川跡は共通
+        stationPositions[name] = kawato; // 川跡は共通
       } else {
         stationPositions[name] = {
-          x: startX + (mainStations.indexOf("川跡") + i + 1) * stationSpacing, // 右に1駅分シフト
-          y: startY + 150
+          x: kawato.x + i * stationSpacing, // 川跡から右方向へ
+          y: kawato.y + 150                 // 垂直に落としてから平行
         };
       }
     });
 
     // 路線の描画
+    // 本線
     svg.append("line")
       .attr("x1", stationPositions["松江温泉"].x)
       .attr("y1", stationPositions["松江温泉"].y)
@@ -59,9 +61,18 @@
       .attr("y2", stationPositions["電鉄出雲市"].y)
       .attr("stroke", "black");
 
+    // 川跡から垂直に支線を下ろす
     svg.append("line")
-      .attr("x1", stationPositions["川跡"].x)
-      .attr("y1", stationPositions["川跡"].y)
+      .attr("x1", kawato.x)
+      .attr("y1", kawato.y)
+      .attr("x2", kawato.x)
+      .attr("y2", kawato.y + 150)
+      .attr("stroke", "black");
+
+    // 支線（平行部分）
+    svg.append("line")
+      .attr("x1", stationPositions["高浜"].x)
+      .attr("y1", stationPositions["高浜"].y)
       .attr("x2", stationPositions["出雲大社前"].x)
       .attr("y2", stationPositions["出雲大社前"].y)
       .attr("stroke", "black");
@@ -113,13 +124,14 @@
         )
       }));
 
-      let currentTime = 600; // 開始時刻（06:00）
-
       function update() {
-        // 時刻表示
-        const hh = String(Math.floor(currentTime / 100)).padStart(2,"0");
-        const mm = String(currentTime % 100).padStart(2,"0");
-        timeLabel.text(`${hh}:${mm}`);
+        // 実時間を分単位で計算
+        const now = new Date();
+        const hh = now.getHours();
+        const mm = now.getMinutes();
+        const currentTime = hh * 100 + mm;
+
+        timeLabel.text(`${hh.toString().padStart(2,"0")}:${mm.toString().padStart(2,"0")}`);
 
         svg.selectAll(".train").remove();
 
@@ -167,13 +179,9 @@
             .attr("class", "train")
             .text(train.name);
         });
-
-        // 時刻を1分進める
-        currentTime++;
-        if (currentTime % 100 === 60) currentTime += 40; // 例: 6:59 -> 7:00
       }
 
-      setInterval(update, 1000); // 1秒ごとに更新
+      setInterval(update, 1000); // 実時間に合わせて1秒ごとに更新
     });
   </script>
 </body>
