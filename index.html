@@ -2,174 +2,167 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>列車走行表示</title>
+  <title>列車運行表示（Y字分岐）</title>
   <style>
-    body {
-      font-family: sans-serif;
-      padding: 20px;
-    }
-    #time {
-      font-size: 24px;
-      margin-bottom: 20px;
-    }
-    .line {
-      position: relative;
-      height: 120px;
-      margin-bottom: 60px;
-      border-top: 2px solid black;
-    }
+    body { font-family: sans-serif; text-align: center; }
+    #clock { font-size: 24px; margin: 10px; }
+    #map { position: relative; margin: 20px auto; width: 1400px; height: 400px; }
     .station {
-      position: absolute;
-      top: -10px;
-      transform: translateX(-50%);
-      text-align: center;
+      position: absolute; text-align: center; transform: translate(-50%, -50%);
     }
-    .station span {
-      display: block;
-      font-size: 12px;
-      margin-top: 4px;
+    .station-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: black; margin: auto;
     }
     .train {
-      position: absolute;
-      width: auto;
-      padding: 4px 10px;
-      border-radius: 8px;
-      font-size: 12px;
-      white-space: nowrap;
-      transform: translate(-50%, -50%);
-    }
-    /* アイコンの矢印 */
-    .train.up::after, .train.down::after {
-      content: "";
-      position: absolute;
-      top: 50%;
-      border: 6px solid transparent;
-      transform: translateY(-50%);
+      position: absolute; padding: 3px 8px;
+      border: 2px solid black; border-radius: 5px;
+      display: flex; align-items: center; justify-content: center;
+      white-space: nowrap; font-size: 12px;
     }
     .train.up::after {
-      right: -12px;
-      border-left-color: inherit;
+      content: ""; margin-left: 5px;
+      border-top: 7px solid transparent;
+      border-bottom: 7px solid transparent;
+      border-left: 10px solid currentColor;
     }
-    .train.down::after {
-      left: -12px;
-      border-right-color: inherit;
+    .train.down::before {
+      content: ""; margin-right: 5px;
+      border-top: 7px solid transparent;
+      border-bottom: 7px solid transparent;
+      border-right: 10px solid currentColor;
     }
+    svg { position: absolute; top:0; left:0; width:100%; height:100%; }
+    line { stroke: black; stroke-width: 2; }
   </style>
 </head>
 <body>
-  <div id="time"></div>
+  <div id="clock"></div>
+  <div id="map">
+    <svg id="track"></svg>
+  </div>
 
-  <div id="line1" class="line"></div>
-  <div id="line2" class="line"></div>
-
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
   <script>
-    // 路線と駅一覧
-    const stationsLine1 = ["松江温泉","ガーデン前","朝日ヶ丘","長江","秋鹿町","フォーゲル","高ノ宮","津ノ森","伊野灘","一畑口","園","湖遊館新駅","布崎","雲州平田","旅伏","美談","大寺","川跡","武志","大津町","科学館前","電鉄出雲市"];
-    const stationsLine2 = ["川跡","高浜","遥堪","浜山公園北口","出雲大社前"];
+    // ==== 駅座標定義 ====
+    const spacing = 60;
 
-    // 色分けルール
-    function getTrainStyle(name) {
-      if (name.includes("A")) return {bg:"red", color:"white"};
-      if (name.includes("B")) return {bg:"green", color:"white"};
-      if (name.includes("C")) return {bg:"yellow", color:"black"};
-      if (name.includes("D")) return {bg:"blue", color:"black"};
-      if (name.includes("E")) return {bg:"transparent", color:"black", border:"1px solid black"};
-      if (name.includes("F")) return {bg:"cyan", color:"black"};
-      if (name.includes("G")) return {bg:"orange", color:"white"};
-      if (name.includes("H")) return {bg:"pink", color:"black"};
-      if (name.includes("I")) return {bg:"limegreen", color:"black"};
-      return {bg:"gray", color:"white"};
-    }
+    const stations1 = ["松江温泉","ガーデン前","朝日ヶ丘","長江","秋鹿町","フォーゲル","高ノ宮","津ノ森","伊野灘","一畑口","園","湖遊館新駅","布崎","雲州平田","旅伏","美談","大寺","川跡","武志","大津町","科学館前","電鉄出雲市"];
+    const stations2 = ["川跡","高浜","遥堪","浜山公園北口","出雲大社前"];
 
-    // 駅を描画
-    function renderStations(container, stations) {
-      stations.forEach((s, i) => {
-        const div = document.createElement("div");
-        div.className = "station";
-        div.style.left = (i/(stations.length-1))*100 + "%";
-        div.innerHTML = "●<span>"+s+"</span>";
-        container.appendChild(div);
-      });
-    }
+    const coords = {};
+    // 路線1 横一列 y=150
+    stations1.forEach((st, i)=>{ coords[st] = {x:50+i*spacing, y:150}; });
+    // 路線2 川跡から斜め右下
+    stations2.forEach((st, i)=>{ coords[st] = {x:coords["川跡"].x + i*spacing, y:coords["川跡"].y + i*40}; });
 
-    renderStations(document.getElementById("line1"), stationsLine1);
-    renderStations(document.getElementById("line2"), stationsLine2);
-
-    // CSV読み込み
-    async function loadTrains() {
-      const res = await fetch("trains.csv"); // 同階層に配置
-      const text = await res.text();
-      const lines = text.trim().split("\n").map(l=>l.split(","));
-      const header = lines[0];
-      const trains = [];
-      for (let i=1; i<lines.length; i++) {
-        const row = lines[i];
-        const obj = {train_id:row[0], train_name:row[1], direction:row[2]};
-        header.slice(3).forEach((st, idx)=>{
-          obj[st] = row[3+idx];
-        });
-        trains.push(obj);
+    // ==== SVGに線路描画 ====
+    function drawTracks() {
+      const svg = document.getElementById("track");
+      function addLine(st1, st2){
+        const l = document.createElementNS("http://www.w3.org/2000/svg","line");
+        l.setAttribute("x1", coords[st1].x);
+        l.setAttribute("y1", coords[st1].y);
+        l.setAttribute("x2", coords[st2].x);
+        l.setAttribute("y2", coords[st2].y);
+        svg.appendChild(l);
       }
-      return {header, trains};
+      for (let i=0; i<stations1.length-1; i++) addLine(stations1[i], stations1[i+1]);
+      for (let i=0; i<stations2.length-1; i++) addLine(stations2[i], stations2[i+1]);
+    }
+    drawTracks();
+
+    // ==== 駅マーク描画 ====
+    function drawStations() {
+      const map = document.getElementById("map");
+      [...stations1, ...stations2.filter((s,i)=>i>0)].forEach(st=>{
+        const div = document.createElement("div");
+        div.className="station";
+        div.style.left = coords[st].x+"px";
+        div.style.top = coords[st].y+"px";
+        div.innerHTML=`<div class="station-dot"></div><div>${st}</div>`;
+        map.appendChild(div);
+      });
+    }
+    drawStations();
+
+    // ==== 時刻処理 ====
+    function timeToMinutes(t){ if(!t) return null; const s=t.toString().padStart(4,"0"); return +s.slice(0,2)*60+ +s.slice(2,4);}
+    function getCurrentMinutes(){ const d=new Date(); return d.getHours()*60+d.getMinutes(); }
+
+    function parseStationTimes(train, stations){
+      const times=[];
+      stations.forEach((st, idx)=>{
+        const raw=train[st];
+        if(!raw){ times.push({station:st,arr:null,dep:null}); return; }
+        const m=timeToMinutes(raw);
+        if(train.direction==="up"){
+          if(idx>0 && !train[stations[idx-1]]) times.push({station:st,arr:m,dep:null});
+          else times.push({station:st,arr:null,dep:m});
+        } else {
+          if(idx<stations.length-1 && !train[stations[idx+1]]) times.push({station:st,arr:m,dep:null});
+          else times.push({station:st,arr:null,dep:m});
+        }
+      });
+      return times;
     }
 
-    // 列車を配置
-    function renderTrains(data) {
+    // ==== 色設定 ====
+    function getTrainColor(name){
+      if(name.includes("A")) return {bg:"red", fg:"white"};
+      if(name.includes("B")) return {bg:"green", fg:"white"};
+      if(name.includes("C")) return {bg:"yellow", fg:"black"};
+      if(name.includes("D")) return {bg:"blue", fg:"black"};
+      if(name.includes("E")) return {bg:"transparent", fg:"black"};
+      if(name.includes("F")) return {bg:"cyan", fg:"black"};
+      if(name.includes("G")) return {bg:"orange", fg:"white"};
+      if(name.includes("H")) return {bg:"pink", fg:"black"};
+      if(name.includes("I")) return {bg:"limegreen", fg:"black"};
+      return {bg:"gray", fg:"white"};
+    }
+
+    // ==== 列車描画 ====
+    function drawTrains(trains, stations){
       document.querySelectorAll(".train").forEach(e=>e.remove());
-      const now = new Date();
-      const nowHM = now.getHours()*60 + now.getMinutes();
+      const now=getCurrentMinutes();
+      const map=document.getElementById("map");
 
-      data.trains.forEach(train=>{
-        const stations = data.header.slice(3);
-        let prev=null,next=null;
-        for (let i=0;i<stations.length;i++){
-          const t = train[stations[i]];
-          if (!t) continue;
-          const hm = parseInt(t.substr(0,2))*60 + parseInt(t.substr(2));
-          if (hm<=nowHM) prev={station:stations[i],time:hm};
-          if (hm>nowHM){ next={station:stations[i],time:hm}; break; }
+      trains.forEach(train=>{
+        const times=parseStationTimes(train,stations);
+        for(let i=0;i<times.length-1;i++){
+          const dep=times[i].dep, arr=times[i+1].arr;
+          if(dep!==null && arr!==null && now>=dep && now<=arr){
+            const ratio=(now-dep)/(arr-dep);
+            const x=coords[times[i].station].x+(coords[times[i+1].station].x-coords[times[i].station].x)*ratio;
+            const y=coords[times[i].station].y+(coords[times[i+1].station].y-coords[times[i].station].y)*ratio;
+            const c=getTrainColor(train.train_name);
+            const div=document.createElement("div");
+            div.className=`train ${train.direction}`;
+            div.style.left=x+"px"; div.style.top=y+"px";
+            div.style.backgroundColor=c.bg; div.style.color=c.fg;
+            div.textContent=train.train_name;
+            map.appendChild(div);
+          }
         }
-        if (!prev || !next) return; // 始発前 or 終点後
-
-        const ratio = (nowHM-prev.time)/(next.time-prev.time);
-        const lineId = stationsLine1.includes(prev.station)&&stationsLine1.includes(next.station) ? "line1":"line2";
-        const container=document.getElementById(lineId);
-        const stList=lineId==="line1"?stationsLine1:stationsLine2;
-        const i1=stList.indexOf(prev.station), i2=stList.indexOf(next.station);
-        if (i1<0||i2<0) return;
-
-        const pos = i1+ratio*(i2-i1);
-        const div=document.createElement("div");
-        div.className="train "+train.direction;
-        const style=getTrainStyle(train.train_name);
-        div.style.background=style.bg;
-        div.style.color=style.color;
-        if (style.border) div.style.border=style.border;
-        div.style.left=(pos/(stList.length-1))*100+"%";
-        div.style.top=train.direction==="up"?"-20px":"40px";
-        div.textContent=train.train_name;
-        container.appendChild(div);
       });
     }
 
-    // 時計
-    function updateClock() {
-      const now=new Date();
-      const hh=String(now.getHours()).padStart(2,"0");
-      const mm=String(now.getMinutes()).padStart(2,"0");
-      const ss=String(now.getSeconds()).padStart(2,"0");
-      document.getElementById("time").textContent=`現在時刻 ${hh}:${mm}:${ss}`;
+    // ==== 時計 ====
+    function updateClock(){
+      const d=new Date();
+      document.getElementById("clock").textContent=d.toLocaleTimeString("ja-JP",{hour12:false});
     }
 
-    // メインループ
-    async function main() {
-      const data=await loadTrains();
+    // ==== CSV読み込み & 更新 ====
+    let trains=[];
+    Papa.parse("timetable.csv",{download:true,header:true,complete:(res)=>{
+      trains=res.data;
       setInterval(()=>{
         updateClock();
-        renderTrains(data);
+        drawTrains(trains, stations1);
+        drawTrains(trains, stations2);
       },1000);
-    }
-    main();
+    }});
   </script>
 </body>
 </html>
