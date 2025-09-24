@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>列車走行表示</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+    }
+    #time {
+      font-size: 24px;
+      margin-bottom: 20px;
+    }
+    .line {
+      position: relative;
+      height: 120px;
+      margin-bottom: 60px;
+      border-top: 2px solid black;
+    }
+    .station {
+      position: absolute;
+      top: -10px;
+      transform: translateX(-50%);
+      text-align: center;
+    }
+    .station span {
+      display: block;
+      font-size: 12px;
+      margin-top: 4px;
+    }
+    .train {
+      position: absolute;
+      width: auto;
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      white-space: nowrap;
+      transform: translate(-50%, -50%);
+    }
+    /* アイコンの矢印 */
+    .train.up::after, .train.down::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      border: 6px solid transparent;
+      transform: translateY(-50%);
+    }
+    .train.up::after {
+      right: -12px;
+      border-left-color: inherit;
+    }
+    .train.down::after {
+      left: -12px;
+      border-right-color: inherit;
+    }
+  </style>
+</head>
+<body>
+  <div id="time"></div>
+
+  <div id="line1" class="line"></div>
+  <div id="line2" class="line"></div>
+
+  <script>
+    // 路線と駅一覧
+    const stationsLine1 = ["松江温泉","ガーデン前","朝日ヶ丘","長江","秋鹿町","フォーゲル","高ノ宮","津ノ森","伊野灘","一畑口","園","湖遊館新駅","布崎","雲州平田","旅伏","美談","大寺","川跡","武志","大津町","科学館前","電鉄出雲市"];
+    const stationsLine2 = ["川跡","高浜","遥堪","浜山公園北口","出雲大社前"];
+
+    // 色分けルール
+    function getTrainStyle(name) {
+      if (name.includes("A")) return {bg:"red", color:"white"};
+      if (name.includes("B")) return {bg:"green", color:"white"};
+      if (name.includes("C")) return {bg:"yellow", color:"black"};
+      if (name.includes("D")) return {bg:"blue", color:"black"};
+      if (name.includes("E")) return {bg:"transparent", color:"black", border:"1px solid black"};
+      if (name.includes("F")) return {bg:"cyan", color:"black"};
+      if (name.includes("G")) return {bg:"orange", color:"white"};
+      if (name.includes("H")) return {bg:"pink", color:"black"};
+      if (name.includes("I")) return {bg:"limegreen", color:"black"};
+      return {bg:"gray", color:"white"};
+    }
+
+    // 駅を描画
+    function renderStations(container, stations) {
+      stations.forEach((s, i) => {
+        const div = document.createElement("div");
+        div.className = "station";
+        div.style.left = (i/(stations.length-1))*100 + "%";
+        div.innerHTML = "●<span>"+s+"</span>";
+        container.appendChild(div);
+      });
+    }
+
+    renderStations(document.getElementById("line1"), stationsLine1);
+    renderStations(document.getElementById("line2"), stationsLine2);
+
+    // CSV読み込み
+    async function loadTrains() {
+      const res = await fetch("trains.csv"); // 同階層に配置
+      const text = await res.text();
+      const lines = text.trim().split("\n").map(l=>l.split(","));
+      const header = lines[0];
+      const trains = [];
+      for (let i=1; i<lines.length; i++) {
+        const row = lines[i];
+        const obj = {train_id:row[0], train_name:row[1], direction:row[2]};
+        header.slice(3).forEach((st, idx)=>{
+          obj[st] = row[3+idx];
+        });
+        trains.push(obj);
+      }
+      return {header, trains};
+    }
+
+    // 列車を配置
+    function renderTrains(data) {
+      document.querySelectorAll(".train").forEach(e=>e.remove());
+      const now = new Date();
+      const nowHM = now.getHours()*60 + now.getMinutes();
+
+      data.trains.forEach(train=>{
+        const stations = data.header.slice(3);
+        let prev=null,next=null;
+        for (let i=0;i<stations.length;i++){
+          const t = train[stations[i]];
+          if (!t) continue;
+          const hm = parseInt(t.substr(0,2))*60 + parseInt(t.substr(2));
+          if (hm<=nowHM) prev={station:stations[i],time:hm};
+          if (hm>nowHM){ next={station:stations[i],time:hm}; break; }
+        }
+        if (!prev || !next) return; // 始発前 or 終点後
+
+        const ratio = (nowHM-prev.time)/(next.time-prev.time);
+        const lineId = stationsLine1.includes(prev.station)&&stationsLine1.includes(next.station) ? "line1":"line2";
+        const container=document.getElementById(lineId);
+        const stList=lineId==="line1"?stationsLine1:stationsLine2;
+        const i1=stList.indexOf(prev.station), i2=stList.indexOf(next.station);
+        if (i1<0||i2<0) return;
+
+        const pos = i1+ratio*(i2-i1);
+        const div=document.createElement("div");
+        div.className="train "+train.direction;
+        const style=getTrainStyle(train.train_name);
+        div.style.background=style.bg;
+        div.style.color=style.color;
+        if (style.border) div.style.border=style.border;
+        div.style.left=(pos/(stList.length-1))*100+"%";
+        div.style.top=train.direction==="up"?"-20px":"40px";
+        div.textContent=train.train_name;
+        container.appendChild(div);
+      });
+    }
+
+    // 時計
+    function updateClock() {
+      const now=new Date();
+      const hh=String(now.getHours()).padStart(2,"0");
+      const mm=String(now.getMinutes()).padStart(2,"0");
+      const ss=String(now.getSeconds()).padStart(2,"0");
+      document.getElementById("time").textContent=`現在時刻 ${hh}:${mm}:${ss}`;
+    }
+
+    // メインループ
+    async function main() {
+      const data=await loadTrains();
+      setInterval(()=>{
+        updateClock();
+        renderTrains(data);
+      },1000);
+    }
+    main();
+  </script>
+</body>
+</html>
