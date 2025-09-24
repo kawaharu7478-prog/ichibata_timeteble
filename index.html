@@ -1,168 +1,144 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>列車運行表示（Y字分岐）</title>
-  <style>
-    body { font-family: sans-serif; text-align: center; }
-    #clock { font-size: 24px; margin: 10px; }
-    #map { position: relative; margin: 20px auto; width: 1400px; height: 400px; }
-    .station {
-      position: absolute; text-align: center; transform: translate(-50%, -50%);
-    }
-    .station-dot {
-      width: 10px; height: 10px; border-radius: 50%;
-      background: black; margin: auto;
-    }
-    .train {
-      position: absolute; padding: 3px 8px;
-      border: 2px solid black; border-radius: 5px;
-      display: flex; align-items: center; justify-content: center;
-      white-space: nowrap; font-size: 12px;
-    }
-    .train.up::after {
-      content: ""; margin-left: 5px;
-      border-top: 7px solid transparent;
-      border-bottom: 7px solid transparent;
-      border-left: 10px solid currentColor;
-    }
-    .train.down::before {
-      content: ""; margin-right: 5px;
-      border-top: 7px solid transparent;
-      border-bottom: 7px solid transparent;
-      border-right: 10px solid currentColor;
-    }
-    svg { position: absolute; top:0; left:0; width:100%; height:100%; }
-    line { stroke: black; stroke-width: 2; }
-  </style>
+<meta charset="UTF-8">
+<title>一畑電車 運行表示</title>
+<style>
+  body { font-family: sans-serif; text-align: center; }
+  #time { font-size: 24px; margin: 10px; font-weight: bold; }
+  canvas { border:1px solid #ccc; }
+</style>
 </head>
 <body>
-  <div id="clock"></div>
-  <div id="map">
-    <svg id="track"></svg>
-  </div>
+  <div id="time"></div>
+  <canvas id="canvas" width="1400" height="400"></canvas>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
-  <script>
-    // ==== 駅座標定義 ====
-    const spacing = 60;
+<script>
+const stations1 = ["松江温泉","ガーデン前","朝日ヶ丘","長江","秋鹿町","フォーゲル","高ノ宮","津ノ森","伊野灘","一畑口","園","湖遊館新駅","布崎","雲州平田","旅伏","美談","大寺","川跡","武志","大津町","科学館前","電鉄出雲市"];
+const stations2 = ["川跡","高浜","遥堪","浜山公園北口","出雲大社前"];
 
-    const stations1 = ["松江温泉","ガーデン前","朝日ヶ丘","長江","秋鹿町","フォーゲル","高ノ宮","津ノ森","伊野灘","一畑口","園","湖遊館新駅","布崎","雲州平田","旅伏","美談","大寺","川跡","武志","大津町","科学館前","電鉄出雲市"];
-    const stations2 = ["川跡","高浜","遥堪","浜山公園北口","出雲大社前"];
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const spacing = 55;
+const baseY = 200;
+const branchY = 300;
 
-    const coords = {};
-    // 路線1 横一列 y=150
-    stations1.forEach((st, i)=>{ coords[st] = {x:50+i*spacing, y:150}; });
-    // 路線2 川跡から斜め右下
-    stations2.forEach((st, i)=>{ coords[st] = {x:coords["川跡"].x + i*spacing, y:coords["川跡"].y + i*40}; });
+function parseTime(str) {
+  if (!str || isNaN(str)) return null;
+  const h = Math.floor(str / 100);
+  const m = str % 100;
+  return h * 60 + m;
+}
 
-    // ==== SVGに線路描画 ====
-    function drawTracks() {
-      const svg = document.getElementById("track");
-      function addLine(st1, st2){
-        const l = document.createElementNS("http://www.w3.org/2000/svg","line");
-        l.setAttribute("x1", coords[st1].x);
-        l.setAttribute("y1", coords[st1].y);
-        l.setAttribute("x2", coords[st2].x);
-        l.setAttribute("y2", coords[st2].y);
-        svg.appendChild(l);
+function getCurrentMinutes() {
+  const d = new Date();
+  return d.getHours()*60 + d.getMinutes();
+}
+
+function getTrainColor(train_name) {
+  if (train_name.includes("A")) return {bg: "red", fg: "white"};
+  if (train_name.includes("B")) return {bg: "green", fg: "white"};
+  if (train_name.includes("C")) return {bg: "yellow", fg: "black"};
+  if (train_name.includes("D")) return {bg: "blue", fg: "black"};
+  if (train_name.includes("E")) return {bg: "transparent", fg: "black", border:"black"};
+  if (train_name.includes("F")) return {bg: "cyan", fg: "black"};
+  if (train_name.includes("G")) return {bg: "orange", fg: "white"};
+  if (train_name.includes("H")) return {bg: "pink", fg: "black"};
+  if (train_name.includes("I")) return {bg: "limegreen", fg: "black"};
+  return {bg: "gray", fg: "white"};
+}
+
+function drawTrainIcon(x,y,train,direction) {
+  const {bg,fg,border} = getTrainColor(train.train_name);
+  ctx.font = "12px sans-serif";
+  const textW = ctx.measureText(train.train_name).width;
+  const w = textW+10, h=20;
+  ctx.beginPath();
+  if(direction==="up"){
+    ctx.rect(x-w/2, y-h-10, w, h);
+    ctx.moveTo(x+w/2, y-h-10);
+    ctx.lineTo(x+w/2+10, y-h/2-10);
+    ctx.lineTo(x+w/2, y-10);
+  } else {
+    ctx.rect(x-w/2, y+10, w, h);
+    ctx.moveTo(x-w/2, y+10);
+    ctx.lineTo(x-w/2-10, y+h/2+10);
+    ctx.lineTo(x-w/2, y+h+10);
+  }
+  ctx.closePath();
+  if(bg!=="transparent"){
+    ctx.fillStyle = bg;
+    ctx.fill();
+  }
+  if(border){
+    ctx.strokeStyle=border;
+    ctx.stroke();
+  }
+  ctx.fillStyle = fg;
+  ctx.textBaseline="middle";
+  const ty = direction==="up"? y-h/2-10 : y+h/2+10;
+  ctx.fillText(train.train_name, x-textW/2, ty);
+}
+
+function drawScene(trains) {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // 路線1
+  ctx.beginPath();
+  ctx.moveTo(50, baseY);
+  ctx.lineTo(50+spacing*(stations1.length-1), baseY);
+  ctx.stroke();
+  stations1.forEach((s,i)=>{
+    const x=50+i*spacing;
+    ctx.fillText(s, x-10, baseY-10);
+  });
+
+  // 路線2 (川跡から分岐)
+  const kawatoX = 50+stations1.indexOf("川跡")*spacing;
+  ctx.beginPath();
+  ctx.moveTo(kawatoX, baseY);
+  ctx.lineTo(kawatoX+spacing*(stations2.length-1), branchY);
+  ctx.stroke();
+  stations2.forEach((s,i)=>{
+    const x=kawatoX+i*spacing;
+    ctx.fillText(s, x-10, branchY+25);
+  });
+
+  const now = getCurrentMinutes();
+  document.getElementById("time").textContent =
+      new Date().toLocaleTimeString('ja-JP',{hour12:false});
+
+  trains.forEach(train=>{
+    const stations = (train.direction==="up"||train.direction==="down")
+      ? stations1.concat(stations2.slice(1))
+      : stations1;
+    const times = stations.map(s=>parseTime(train[s]));
+
+    for(let i=0;i<stations.length-1;i++){
+      const t1 = times[i], t2 = times[i+1];
+      if(t1!==null && t2!==null && now>=t1 && now<=t2){
+        let ratio = (now-t1)/(t2-t1);
+        let x1=50+i*spacing, x2=50+(i+1)*spacing;
+        let y1=stations[i]==="川跡"?baseY: (stations2.includes(stations[i])?branchY:baseY);
+        let y2=stations[i+1]==="川跡"?baseY: (stations2.includes(stations[i+1])?branchY:baseY);
+        let x=x1+(x2-x1)*ratio, y=y1+(y2-y1)*ratio;
+        drawTrainIcon(x,y,train,train.direction);
       }
-      for (let i=0; i<stations1.length-1; i++) addLine(stations1[i], stations1[i+1]);
-      for (let i=0; i<stations2.length-1; i++) addLine(stations2[i], stations2[i+1]);
     }
-    drawTracks();
+  });
+}
 
-    // ==== 駅マーク描画 ====
-    function drawStations() {
-      const map = document.getElementById("map");
-      [...stations1, ...stations2.filter((s,i)=>i>0)].forEach(st=>{
-        const div = document.createElement("div");
-        div.className="station";
-        div.style.left = coords[st].x+"px";
-        div.style.top = coords[st].y+"px";
-        div.innerHTML=`<div class="station-dot"></div><div>${st}</div>`;
-        map.appendChild(div);
-      });
-    }
-    drawStations();
+// サンプル列車データ
+const trains=[
+  {train_id:2,train_name:"A特急",direction:"up",
+    "松江温泉":600,"ガーデン前":605,"川跡":630,"電鉄出雲市":650},
+  {train_id:3,train_name:"B普通",direction:"down",
+    "電鉄出雲市":700,"川跡":720,"松江温泉":740},
+  {train_id:4,train_name:"C出雲大社",direction:"up",
+    "川跡":800,"高浜":805,"出雲大社前":815}
+];
 
-    // ==== 時刻処理 ====
-    function timeToMinutes(t){ if(!t) return null; const s=t.toString().padStart(4,"0"); return +s.slice(0,2)*60+ +s.slice(2,4);}
-    function getCurrentMinutes(){ const d=new Date(); return d.getHours()*60+d.getMinutes(); }
-
-    function parseStationTimes(train, stations){
-      const times=[];
-      stations.forEach((st, idx)=>{
-        const raw=train[st];
-        if(!raw){ times.push({station:st,arr:null,dep:null}); return; }
-        const m=timeToMinutes(raw);
-        if(train.direction==="up"){
-          if(idx>0 && !train[stations[idx-1]]) times.push({station:st,arr:m,dep:null});
-          else times.push({station:st,arr:null,dep:m});
-        } else {
-          if(idx<stations.length-1 && !train[stations[idx+1]]) times.push({station:st,arr:m,dep:null});
-          else times.push({station:st,arr:null,dep:m});
-        }
-      });
-      return times;
-    }
-
-    // ==== 色設定 ====
-    function getTrainColor(name){
-      if(name.includes("A")) return {bg:"red", fg:"white"};
-      if(name.includes("B")) return {bg:"green", fg:"white"};
-      if(name.includes("C")) return {bg:"yellow", fg:"black"};
-      if(name.includes("D")) return {bg:"blue", fg:"black"};
-      if(name.includes("E")) return {bg:"transparent", fg:"black"};
-      if(name.includes("F")) return {bg:"cyan", fg:"black"};
-      if(name.includes("G")) return {bg:"orange", fg:"white"};
-      if(name.includes("H")) return {bg:"pink", fg:"black"};
-      if(name.includes("I")) return {bg:"limegreen", fg:"black"};
-      return {bg:"gray", fg:"white"};
-    }
-
-    // ==== 列車描画 ====
-    function drawTrains(trains, stations){
-      document.querySelectorAll(".train").forEach(e=>e.remove());
-      const now=getCurrentMinutes();
-      const map=document.getElementById("map");
-
-      trains.forEach(train=>{
-        const times=parseStationTimes(train,stations);
-        for(let i=0;i<times.length-1;i++){
-          const dep=times[i].dep, arr=times[i+1].arr;
-          if(dep!==null && arr!==null && now>=dep && now<=arr){
-            const ratio=(now-dep)/(arr-dep);
-            const x=coords[times[i].station].x+(coords[times[i+1].station].x-coords[times[i].station].x)*ratio;
-            const y=coords[times[i].station].y+(coords[times[i+1].station].y-coords[times[i].station].y)*ratio;
-            const c=getTrainColor(train.train_name);
-            const div=document.createElement("div");
-            div.className=`train ${train.direction}`;
-            div.style.left=x+"px"; div.style.top=y+"px";
-            div.style.backgroundColor=c.bg; div.style.color=c.fg;
-            div.textContent=train.train_name;
-            map.appendChild(div);
-          }
-        }
-      });
-    }
-
-    // ==== 時計 ====
-    function updateClock(){
-      const d=new Date();
-      document.getElementById("clock").textContent=d.toLocaleTimeString("ja-JP",{hour12:false});
-    }
-
-    // ==== CSV読み込み & 更新 ====
-    let trains=[];
-    Papa.parse("timetable.csv",{download:true,header:true,complete:(res)=>{
-      trains=res.data;
-      setInterval(()=>{
-        updateClock();
-        drawTrains(trains, stations1);
-        drawTrains(trains, stations2);
-      },1000);
-    }});
-  </script>
+setInterval(()=>drawScene(trains),1000);
+</script>
 </body>
 </html>
