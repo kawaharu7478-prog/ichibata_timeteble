@@ -1,204 +1,332 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>列車走行位置表示</title>
-  <style>
-    body { font-family: sans-serif; background: #f8f8f8; }
-    #time { font-size: 24px; font-weight: bold; margin: 20px; text-align: center; }
-    .line { position: relative; margin: 80px 20px; }
-    .station {
-      position: absolute; text-align: center;
-      width: 100px; transform: translateX(-50%);
-    }
-    .station::before {
-      content: ''; position: absolute; top: 20px; left: 50%;
-      width: 10px; height: 10px; background: black; border-radius: 50%;
-      transform: translateX(-50%);
-    }
-    .track {
-      position: absolute; height: 2px; background: black; top: 25px;
-    }
-    .branch-track { position: absolute; width: 2px; background: black; }
-    .train {
-      position: absolute; padding: 2px 8px; font-size: 12px;
-      white-space: nowrap; text-align: center;
-      clip-path: polygon(0% 0%, 90% 0%, 100% 50%, 90% 100%, 0% 100%);
-    }
-    .train.down {
-      clip-path: polygon(10% 0%, 100% 0%, 100% 100%, 10% 100%, 0% 50%);
-    }
-    /* 色分けルール */
-    .A { background: red; color: white; }
-    .B { background: green; color: white; }
-    .C { background: yellow; color: black; }
-    .D { background: blue; color: black; }
-    .E { background: transparent; color: black; border: 2px solid black; }
-    .F { background: cyan; color: black; }
-    .G { background: orange; color: white; }
-    .H { background: pink; color: black; }
-    .I { background: yellowgreen; color: black; }
-  </style>
+<meta charset="utf-8"/>
+<title>列車走行表示（修正版）</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  body { font-family: system-ui, "Noto Sans JP", sans-serif; background:#f7f7fb; margin:0; padding:12px; }
+  #time { text-align:center; font-size:22px; font-weight:600; margin-bottom:10px; }
+  #map { position:relative; width:100%; min-width:1200px; height:700px; background: #fff; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.06); overflow:hidden; }
+  .station { position:absolute; transform: translate(-50%, -50%); text-align:center; font-size:13px; pointer-events:none; }
+  .station .dot { width:10px; height:10px; border-radius:50%; background:#111; margin:0 auto 6px; }
+  .track-h { position:absolute; height:2px; background:#111; top:50%; transform:translateY(-50%); }
+  .track-v { position:absolute; width:2px; background:#111; left:50%; transform:translateX(-50%); }
+  .train { position:absolute; transform: translate(-50%,-50%); white-space:nowrap; font-size:13px; display:inline-flex; align-items:center; justify-content:center; padding:6px 12px; box-sizing:content-box; border:2px solid #111; }
+  /* 右尖り */
+  .train.up { clip-path: polygon(0% 0%, 85% 0%, 100% 50%, 85% 100%, 0% 100%); }
+  /* 左尖り */
+  .train.down { clip-path: polygon(15% 0%, 100% 0%, 100% 100%, 15% 100%, 0% 50%); }
+
+  /* 色 classes */
+  .A{background:red;color:#fff;border-color:#800}
+  .B{background:green;color:#fff;border-color:#064}
+  .C{background:yellow;color:#000;border-color:#885}
+  .D{background:blue;color:#000;border-color:#012}
+  .E{background:transparent;color:#000;border-color:#111}
+  .F{background:cyan;color:#000;border-color:#088}
+  .G{background:orange;color:#fff;border-color:#a63}
+  .H{background:pink;color:#000;border-color:#c33}
+  .I{background:yellowgreen;color:#000;border-color:#5a5}
+  .defaultColor{background:#ddd;color:#111;border-color:#999}
+</style>
 </head>
 <body>
-  <div id="time">--:--</div>
+  <div id="time">--:--:--</div>
   <div id="map"></div>
 
-  <script>
-    // 本線と支線の駅
-    const mainStations = [
-      "松江温泉","ガーデン前","朝日ヶ丘","長江","秋鹿町","フォーゲル","高ノ宮","津ノ森","伊野灘","一畑口",
-      "園","湖遊館新駅","布崎","雲州平田","旅伏","美談","大寺","川跡","武志","大津町","科学館前","電鉄出雲市"
-    ];
-    const branchStations = ["川跡","高浜","遥堪","浜山公園北口","出雲大社前"];
+<script>
+// ======= 固定データ =======
+const mainStations = ["松江温泉","ガーデン前","朝日ヶ丘","長江","秋鹿町","フォーゲル","高ノ宮","津ノ森","伊野灘","一畑口","園","湖遊館新駅","布崎","雲州平田","旅伏","美談","大寺","川跡","武志","大津町","科学館前","電鉄出雲市"];
+const branchStations = ["川跡","高浜","遥堪","浜山公園北口","出雲大社前"];
 
-    const stationPos = {}; // 駅座標
-    const spacingX = 150;  // 横方向間隔
-    const spacingY = 120;  // 支線の縦間隔
+// レイアウト設定（調整可）
+const startX = 120;
+const startY_main = 180;
+const spacingX = 150;   // 横間隔（広く）
+const branchDrop = 120; // 川跡から垂直に下ろす距離
+const branchSpacingX = spacingX; // 支線横間隔
+const offsetUp = 50;    // up 列車の縦オフセット（駅表示の上）
+const offsetDown = 60;  // down 列車の縦オフセット（駅表示の下）
 
-    function drawLines() {
-      const map = document.getElementById("map");
-      map.innerHTML = "";
+// map 要素
+const mapEl = document.getElementById("map");
 
-      // 本線
-      const mainLine = document.createElement("div");
-      mainLine.className = "line";
-      map.appendChild(mainLine);
+// キャンバス用コンテキスト（テキスト幅測定）
+const measureCanvas = document.createElement("canvas");
+const measureCtx = measureCanvas.getContext("2d");
+measureCtx.font = "13px system-ui, 'Noto Sans JP', sans-serif";
 
-      mainStations.forEach((st, i) => {
-        const x = 100 + i * spacingX;
-        const y = 200;
-        stationPos[st] = {x, y};
-        const station = document.createElement("div");
-        station.className = "station";
-        station.style.left = x + "px";
-        station.style.top = y + "px";
-        station.innerHTML = st;
-        mainLine.appendChild(station);
+// ======= 駅座標作成 =======
+const posMain = mainStations.map((st, i) => ({name: st, x: startX + i*spacingX, y: startY_main}));
+const kawaIndex = mainStations.indexOf("川跡");
+if (kawaIndex < 0) throw new Error("mainStations に川跡が見つかりません");
 
-        if (i > 0) {
-          const prevX = 100 + (i-1) * spacingX;
-          const track = document.createElement("div");
-          track.className = "track";
-          track.style.left = prevX + "px";
-          track.style.top = (y+25) + "px";
-          track.style.width = spacingX + "px";
-          mainLine.appendChild(track);
-        }
+const branchStartX = posMain[kawaIndex].x;
+const branchStartY = posMain[kawaIndex].y + branchDrop;
+const posBranch = branchStations.map((st,i) => {
+  if(i===0) return {name:st, x: posMain[kawaIndex].x, y: posMain[kawaIndex].y}; // 川跡は本線と共有
+  return {name:st, x: branchStartX + (i-1)*branchSpacingX, y: branchStartY};
+});
+
+// station position lookup by name for ease
+const stationPosMainMap = {};
+posMain.forEach(p => stationPosMainMap[p.name] = {x:p.x,y:p.y});
+const stationPosBranchMap = {};
+posBranch.forEach((p, idx) => {
+  // branchStations[0] = 川跡 を main と同じ位置に
+  if (idx === 0) stationPosBranchMap[p.name] = {x:p.x,y:p.y};
+  else stationPosBranchMap[p.name] = {x:p.x,y:p.y};
+});
+
+// draw static map (tracks + station labels)
+function drawStaticMap() {
+  mapEl.innerHTML = ""; // clear
+  // draw main horizontal track segments (as divs)
+  // place stations as divs
+  // We'll use absolute positioned elements
+  // container is mapEl; its local coordinates start at 0,0
+  // create line segments as simple divs for visual
+  // main track: continuous horizontal bar from first to last
+  const firstMain = posMain[0]; const lastMain = posMain[posMain.length-1];
+  // draw horizontal track (as full length)
+  const trackMain = document.createElement("div");
+  trackMain.style.position = "absolute";
+  trackMain.style.left = (firstMain.x) + "px";
+  trackMain.style.top = (firstMain.y) + "px";
+  trackMain.style.width = (lastMain.x - firstMain.x) + "px";
+  trackMain.style.height = "2px";
+  trackMain.style.background = "#111";
+  trackMain.style.transform = "translateY(-50%)";
+  mapEl.appendChild(trackMain);
+
+  // draw branch vertical then branch horizontal
+  const vline = document.createElement("div");
+  vline.style.position = "absolute";
+  vline.style.left = (branchStartX) + "px";
+  vline.style.top = (posMain[kawaIndex].y) + "px";
+  vline.style.width = "2px";
+  vline.style.height = (branchStartY - posMain[kawaIndex].y) + "px";
+  vline.style.background = "#111";
+  mapEl.appendChild(vline);
+
+  const lastBranch = posBranch[posBranch.length-1];
+  const hline = document.createElement("div");
+  hline.style.position = "absolute";
+  hline.style.left = (posBranch[1].x - spacingX) + "px";
+  hline.style.top = (branchStartY) + "px";
+  hline.style.height = "2px";
+  hline.style.width = (lastBranch.x - (posBranch[1].x - spacingX)) + "px";
+  hline.style.background = "#111";
+  mapEl.appendChild(hline);
+
+  // add stations (main)
+  posMain.forEach(p => {
+    const s = document.createElement("div");
+    s.className = "station";
+    s.style.left = p.x + "px";
+    s.style.top = p.y + "px";
+    s.innerHTML = `<div class="dot" style="width:10px;height:10px;border-radius:50%;background:#111;margin-bottom:6px;"></div><div style="font-size:13px;">${p.name}</div>`;
+    mapEl.appendChild(s);
+  });
+  // add branch stations (excluding first 川跡 since already drawn)
+  posBranch.forEach((p, idx) => {
+    if (idx===0) return; // 川跡は main に表示済み
+    const s = document.createElement("div");
+    s.className = "station";
+    s.style.left = p.x + "px";
+    s.style.top = p.y + "px";
+    s.innerHTML = `<div class="dot" style="width:10px;height:10px;border-radius:50%;background:#111;margin-bottom:6px;"></div><div style="font-size:13px;">${p.name}</div>`;
+    mapEl.appendChild(s);
+  });
+}
+
+// utility: measure text width
+function measureTextWidth(text) {
+  measureCtx.font = "13px system-ui, 'Noto Sans JP', sans-serif";
+  return measureCtx.measureText(text).width;
+}
+
+// parse CSV while preserving header order and duplicate headers
+function parseCSVPreserveColumns(text) {
+  // split lines robustly (allow CRLF)
+  const lines = text.replace(/\r/g,"").split("\n").filter(l => l.trim() !== "");
+  if (lines.length < 2) return {headers:[], rows:[]};
+  // naive CSV split by comma (assumes no quoted commas). If your CSV can contain commas inside quotes, let me know and I'll switch to a robust parser.
+  const headers = lines[0].split(",").map(h => h.trim());
+  const rows = lines.slice(1).map(line => line.split(",").map(c => c.trim()));
+  return {headers, rows};
+}
+
+// convert "HHMM" string (e.g. "0600") to minutes since midnight
+function hhmmToMinutes(s) {
+  if (!s) return null;
+  s = String(s).trim();
+  if (s === "") return null;
+  // strip quotes if present
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+    s = s.slice(1,-1);
+  }
+  // must be 3 or 4 digits ideally, but we'll pad left
+  if (!/^\d+$/.test(s)) return null;
+  s = s.padStart(4,"0");
+  const hh = parseInt(s.slice(0,2),10);
+  const mm = parseInt(s.slice(2,4),10);
+  if (isNaN(hh) || isNaN(mm)) return null;
+  return hh*60 + mm;
+}
+
+// construct headerStationsPositions array aligned with CSV header columns (columns after first 3)
+function buildHeaderPositions(headers) {
+  const headerStations = headers.slice(3); // array of station names in CSV order
+  const positions = headerStations.map((name, idx) => {
+    // if idx corresponds to mainStations part
+    if (idx < mainStations.length) {
+      const st = mainStations[idx];
+      return {name: st, x: stationPosMainMap[st].x, y: stationPosMainMap[st].y};
+    } else {
+      const branchIdx = idx - mainStations.length;
+      const st = branchStations[branchIdx];
+      // branch pos: for branchIdx==0 it's 川跡 (same as main), else use posBranch entry
+      if (branchIdx === 0) return {name: st, x: stationPosMainMap["川跡"].x, y: stationPosMainMap["川跡"].y};
+      const pb = posBranch[branchIdx];
+      return {name: st, x: pb.x, y: pb.y};
+    }
+  });
+  return {headerStations: headerStations, positions};
+}
+
+// main drawing function (reads trainsRows, headers)
+async function run() {
+  drawStaticMap();
+
+  // load CSV
+  let csvText;
+  try {
+    const res = await fetch("trains.csv");
+    csvText = await res.text();
+  } catch (e) {
+    console.error(e);
+    alert("trains.csv の読み込みに失敗しました（ファイルが存在するか確認してください）。");
+    return;
+  }
+
+  const parsed = parseCSVPreserveColumns(csvText);
+  const headers = parsed.headers; // array of header names (may contain duplicates)
+  const rows = parsed.rows;       // array of arrays (columns)
+
+  if (headers.length < 4) {
+    alert("CSV ヘッダーの形式が不正です。最初の3列は train_id,train_name,direction の順で、続けて駅名の列が必要です。");
+    return;
+  }
+
+  // build header -> positions mapping (for columns after column index 3)
+  const {headerStations, positions: headerPositions} = buildHeaderPositions(headers);
+
+  // update clock every second
+  function updateClockDisplay() {
+    const now = new Date();
+    const s = now.toLocaleTimeString('ja-JP', {hour12:false});
+    document.getElementById("time").textContent = s;
+  }
+  updateClockDisplay();
+  setInterval(updateClockDisplay, 1000);
+
+  // redraw trains each second
+  function updateTrains() {
+    // remove existing trains
+    document.querySelectorAll(".train").forEach(e => e.remove());
+
+    const now = new Date();
+    const nowM = now.getHours()*60 + now.getMinutes();
+
+    // iterate rows (each row is an array of columns)
+    rows.forEach(cols => {
+      const train_id = cols[0] || "";
+      const train_name = cols[1] || "";
+      const direction = (cols[2] || "").toLowerCase();
+
+      // collect times aligned to headerPositions (columns 3 ..)
+      const times = headerPositions.map((_, j) => {
+        const colIdx = 3 + j;
+        const raw = (colIdx < cols.length) ? cols[colIdx] : "";
+        return hhmmToMinutes(raw);
       });
 
-      // 川跡分岐
-      const kawato = stationPos["川跡"];
-      branchStations.forEach((st, i) => {
-        const x = kawato.x + i * spacingX;
-        const y = kawato.y + (i === 0 ? 0 : spacingY);
-        stationPos[st + "_branch"] = {x, y};
-        if (i > 0) {
-          const station = document.createElement("div");
-          station.className = "station";
-          station.style.left = x + "px";
-          station.style.top = y + "px";
-          station.innerHTML = st;
-          map.appendChild(station);
+      // determine earliest and latest valid times (to hide before first / after last)
+      const validTimes = times.filter(t => t !== null);
+      if (validTimes.length < 2) return; // not enough info
 
-          if (i === 1) {
-            // 川跡から垂直
-            const vline = document.createElement("div");
-            vline.className = "branch-track";
-            vline.style.left = kawato.x + "px";
-            vline.style.top = kawato.y + 25 + "px";
-            vline.style.height = spacingY + "px";
-            map.appendChild(vline);
-          }
-          // 横に並行
-          const track = document.createElement("div");
-          track.className = "track";
-          track.style.left = (x - spacingX) + "px";
-          track.style.top = (y+25) + "px";
-          track.style.width = spacingX + "px";
-          map.appendChild(track);
-        }
-      });
-    }
+      const firstT = Math.min(...validTimes);
+      const lastT = Math.max(...validTimes);
+      if (nowM < firstT || nowM > lastT) {
+        // 始発前または終着後は表示しない
+        return;
+      }
 
-    // CSV読み込み
-    async function loadTrains() {
-      const res = await fetch("trains.csv");
-      const text = await res.text();
-      return parseCSV(text);
-    }
+      // find adjacent segment where both times exist and now is between them
+      let drawn = false;
+      for (let j = 0; j < times.length - 1; j++) {
+        const tA = times[j];
+        const tB = times[j+1];
+        if (tA === null || tB === null) continue;
+        // check if now is between tA and tB (inclusive)
+        const low = Math.min(tA, tB), high = Math.max(tA, tB);
+        if (nowM < low || nowM > high) continue;
+        // avoid zero-length
+        if (tA === tB) continue;
 
-    function parseCSV(text) {
-      const lines = text.trim().split("\n").map(l => l.split(","));
-      const header = lines[0];
-      return lines.slice(1).map(row => {
-        const obj = {};
-        header.forEach((h, i) => obj[h] = row[i]);
-        return obj;
-      });
-    }
+        // compute ratio along physical positions from headerPositions[j] -> headerPositions[j+1]
+        const ratio = (nowM - tA) / (tB - tA); // denominator may be negative, ratio in [0,1]
+        const p1 = headerPositions[j];
+        const p2 = headerPositions[j+1];
+        const x = p1.x + (p2.x - p1.x) * ratio;
+        const yBase = p1.y + (p2.y - p1.y) * ratio;
 
-    // 時刻を分に
-    function toMinutes(t) {
-      if (!t || t === "") return null;
-      const h = parseInt(t.slice(0,2),10);
-      const m = parseInt(t.slice(2),10);
-      return h*60+m;
-    }
+        // vertical offset by direction (up above stations, down below)
+        const y = (direction === "up") ? (yBase - offsetUp) : (yBase + offsetDown);
 
-    // 列車表示更新
-    function updateTrains(trains) {
-      const now = new Date();
-      const nowM = now.getHours()*60 + now.getMinutes();
-      document.getElementById("time").textContent =
-        `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+        // create train element
+        const div = document.createElement("div");
+        div.className = "train " + (direction === "down" ? "down" : "up");
+        // color class by train_name contents
+        let applied = false;
+        ["A","B","C","D","E","F","G","H","I"].forEach(ch=>{
+          if (train_name.includes(ch)) { div.classList.add(ch); applied = true; }
+        });
+        if (!applied) div.classList.add("defaultColor");
 
-      // 既存の列車消去
-      document.querySelectorAll(".train").forEach(e => e.remove());
+        // measure width for text and set padding/size so clip-path scales nicely
+        const textW = measureTextWidth(train_name);
+        // set element size: width = textW + horizontalPadding, height ~ line-height
+        const horizPad = 18; // left+right total padding approximate
+        const w = Math.ceil(textW + horizPad);
+        const h = 28; // fixed height for clip-path visuals
 
-      trains.forEach(train => {
-        const dir = train["direction"];
-        const stations = mainStations.concat(branchStations.slice(1).map(s => s+"_branch"));
-        const times = stations.map(st => toMinutes(train[st.replace("_branch","")]));
+        div.style.width = w + "px";
+        div.style.height = h + "px";
+        div.style.lineHeight = h + "px";
+        div.style.left = x + "px";
+        div.style.top = y + "px";
+        div.textContent = train_name;
 
-        for (let i=0; i<stations.length-1; i++) {
-          const t1 = times[i], t2 = times[i+1];
-          if (!t1 || !t2) continue;
+        // append to map
+        mapEl.appendChild(div);
 
-          let inSection = false;
-          if (dir === "up" && t1 <= nowM && nowM <= t2) inSection = true;
-          if (dir === "down" && t2 <= nowM && nowM <= t1) inSection = true;
-          if (!inSection) continue;
+        drawn = true;
+        break; // only one segment per train (first matching adjacent segment)
+      }
+      // if not drawn, nothing to do (either between gaps or no adjacent segment)
+    });
+  }
 
-          const pos1 = stationPos[stations[i]];
-          const pos2 = stationPos[stations[i+1]];
-          const ratio = (nowM - t1) / (t2 - t1);
-          const r = (dir === "down") ? 1 - ratio : ratio;
-          const x = pos1.x + (pos2.x - pos1.x)*r;
-          const yBase = pos1.y + (pos2.y - pos1.y)*r;
-          const y = (dir === "up") ? yBase - 30 : yBase + 40;
+  updateTrains();
+  setInterval(updateTrains, 1000);
+}
 
-          const trainDiv = document.createElement("div");
-          trainDiv.className = "train " + dir;
-          trainDiv.textContent = train["train_name"];
-          "ABCDEFGHI".split("").forEach(c => {
-            if (train["train_name"].includes(c)) trainDiv.classList.add(c);
-          });
-          trainDiv.style.left = x + "px";
-          trainDiv.style.top = y + "px";
-          document.getElementById("map").appendChild(trainDiv);
-          break;
-        }
-      });
-    }
-
-    async function main() {
-      drawLines();
-      const trains = await loadTrains();
-      setInterval(()=>updateTrains(trains), 10000);
-      updateTrains(trains);
-    }
-    main();
-  </script>
+// run
+drawStaticMap();
+run();
+</script>
 </body>
 </html>
