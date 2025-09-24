@@ -24,9 +24,11 @@ const baseY = 200;
 const branchY = 300;
 
 function parseTime(str) {
-  if (!str || isNaN(str)) return null;
-  const h = Math.floor(str / 100);
-  const m = str % 100;
+  if (!str || str.trim()==="") return null;
+  const num = parseInt(str,10);
+  if(isNaN(num)) return null;
+  const h = Math.floor(num / 100);
+  const m = num % 100;
   return h * 60 + m;
 }
 
@@ -93,7 +95,7 @@ function drawScene(trains) {
     ctx.fillText(s, x-10, baseY-10);
   });
 
-  // 路線2 (川跡から分岐)
+  // 路線2
   const kawatoX = 50+stations1.indexOf("川跡")*spacing;
   ctx.beginPath();
   ctx.moveTo(kawatoX, baseY);
@@ -109,18 +111,22 @@ function drawScene(trains) {
       new Date().toLocaleTimeString('ja-JP',{hour12:false});
 
   trains.forEach(train=>{
-    const stations = (train.direction==="up"||train.direction==="down")
-      ? stations1.concat(stations2.slice(1))
-      : stations1;
-    const times = stations.map(s=>parseTime(train[s]));
+    const allStations = [...stations1, ...stations2.slice(1)];
+    const times = allStations.map(s=>parseTime(train[s]));
 
-    for(let i=0;i<stations.length-1;i++){
+    // 始発〜終着の範囲のみ表示
+    const validTimes = times.filter(t=>t!==null);
+    if(validTimes.length<2) return;
+    if(now < Math.min(...validTimes)) return;
+    if(now > Math.max(...validTimes)) return;
+
+    for(let i=0;i<allStations.length-1;i++){
       const t1 = times[i], t2 = times[i+1];
       if(t1!==null && t2!==null && now>=t1 && now<=t2){
         let ratio = (now-t1)/(t2-t1);
         let x1=50+i*spacing, x2=50+(i+1)*spacing;
-        let y1=stations[i]==="川跡"?baseY: (stations2.includes(stations[i])?branchY:baseY);
-        let y2=stations[i+1]==="川跡"?baseY: (stations2.includes(stations[i+1])?branchY:baseY);
+        let y1 = (allStations[i]==="川跡")?baseY:(stations2.includes(allStations[i])?branchY:baseY);
+        let y2 = (allStations[i+1]==="川跡")?baseY:(stations2.includes(allStations[i+1])?branchY:baseY);
         let x=x1+(x2-x1)*ratio, y=y1+(y2-y1)*ratio;
         drawTrainIcon(x,y,train,train.direction);
       }
@@ -128,17 +134,24 @@ function drawScene(trains) {
   });
 }
 
-// サンプル列車データ
-const trains=[
-  {train_id:2,train_name:"A特急",direction:"up",
-    "松江温泉":600,"ガーデン前":605,"川跡":630,"電鉄出雲市":650},
-  {train_id:3,train_name:"B普通",direction:"down",
-    "電鉄出雲市":700,"川跡":720,"松江温泉":740},
-  {train_id:4,train_name:"C出雲大社",direction:"up",
-    "川跡":800,"高浜":805,"出雲大社前":815}
-];
+// CSV 読み込み
+async function loadCSV() {
+  const res = await fetch("trains.csv");
+  const text = await res.text();
+  const lines = text.trim().split(/\r?\n/);
+  const headers = lines[0].split(",");
+  const trains = lines.slice(1).map(line=>{
+    const cols = line.split(",");
+    let obj={};
+    headers.forEach((h,i)=>{ obj[h]=cols[i] || ""; });
+    return obj;
+  });
+  return trains;
+}
 
-setInterval(()=>drawScene(trains),1000);
+loadCSV().then(trains=>{
+  setInterval(()=>drawScene(trains),1000);
+});
 </script>
 </body>
 </html>
