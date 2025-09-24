@@ -29,31 +29,30 @@
     const branchStations = ["川跡","高浜","遥堪","浜山公園北口","出雲大社前"];
 
     // レイアウト設定
-    const stationSpacing = 70;   // 駅間隔（少し広く）
+    const stationSpacing = 70;
     const startX = 100;
     const startY = 120;
 
-    // 本線の座標
+    // 本線座標
     const stationPositions = {};
     mainStations.forEach((name, i) => {
       stationPositions[name] = {x: startX + i * stationSpacing, y: startY};
     });
 
-    // 支線の座標
+    // 支線座標
     const kawato = stationPositions["川跡"];
     branchStations.forEach((name, i) => {
       if (i === 0) {
-        stationPositions[name] = kawato; // 川跡は共通
+        stationPositions[name] = kawato;
       } else {
         stationPositions[name] = {
-          x: kawato.x + i * stationSpacing, // 川跡から右方向へ
-          y: kawato.y + 150                 // 垂直に落としてから平行
+          x: kawato.x + i * stationSpacing,
+          y: kawato.y + 150
         };
       }
     });
 
-    // 路線の描画
-    // 本線
+    // 路線描画
     svg.append("line")
       .attr("x1", stationPositions["松江温泉"].x)
       .attr("y1", stationPositions["松江温泉"].y)
@@ -61,7 +60,6 @@
       .attr("y2", stationPositions["電鉄出雲市"].y)
       .attr("stroke", "black");
 
-    // 川跡から垂直に支線を下ろす
     svg.append("line")
       .attr("x1", kawato.x)
       .attr("y1", kawato.y)
@@ -69,7 +67,6 @@
       .attr("y2", kawato.y + 150)
       .attr("stroke", "black");
 
-    // 支線（平行部分）
     svg.append("line")
       .attr("x1", stationPositions["高浜"].x)
       .attr("y1", stationPositions["高浜"].y)
@@ -77,22 +74,21 @@
       .attr("y2", stationPositions["出雲大社前"].y)
       .attr("stroke", "black");
 
-    // 駅の描画
+    // 駅描画
     Object.entries(stationPositions).forEach(([name, pos]) => {
       svg.append("circle")
         .attr("cx", pos.x)
         .attr("cy", pos.y)
         .attr("r", 5)
         .attr("fill", "black");
-
       svg.append("text")
         .attr("x", pos.x)
         .attr("y", pos.y - 10)
         .attr("class", "station")
-        .text(name);
+        .text(name.replace(".1",""));
     });
 
-    // 列車アイコン色設定
+    // 列車色
     function getTrainStyle(name) {
       if (name.includes("A")) return {fill: "red", text: "white"};
       if (name.includes("B")) return {fill: "green", text: "white"};
@@ -113,25 +109,40 @@
       .attr("class", "time-label")
       .attr("text-anchor", "middle");
 
-    // CSV読込
+    // 時刻を秒に変換
+    function timeToSeconds(hhmm) {
+      if (!hhmm) return null;
+      const s = String(hhmm).padStart(4, "0");
+      const hh = parseInt(s.slice(0,2));
+      const mm = parseInt(s.slice(2,4));
+      return hh * 3600 + mm * 60;
+    }
+
+    // CSV読み込み
     d3.csv("trains.csv").then(data => {
       const trains = data.map(d => ({
         id: d.train_id,
         name: d.train_name,
         direction: d.direction,
         times: Object.fromEntries(
-          Object.entries(d).filter(([k,v]) => k !== "train_id" && k !== "train_name" && k !== "direction" && v)
+          Object.entries(d).filter(([k,v]) =>
+            k !== "train_id" && k !== "train_name" && k !== "direction" && v
+          )
         )
       }));
 
       function update() {
-        // 実時間を分単位で計算
+        // 現在時刻（秒単位）
         const now = new Date();
         const hh = now.getHours();
         const mm = now.getMinutes();
-        const currentTime = hh * 100 + mm;
+        const ss = now.getSeconds();
+        const currentSec = hh * 3600 + mm * 60 + ss;
 
-        timeLabel.text(`${hh.toString().padStart(2,"0")}:${mm.toString().padStart(2,"0")}`);
+        // 表示更新 (hh:mm:ss)
+        timeLabel.text(
+          `${hh.toString().padStart(2,"0")}:${mm.toString().padStart(2,"0")}:${ss.toString().padStart(2,"0")}`
+        );
 
         svg.selectAll(".train").remove();
 
@@ -140,9 +151,9 @@
           let prev = null, next = null;
 
           for (let i = 0; i < stations.length; i++) {
-            const t = parseInt(train.times[stations[i]]);
-            if (t <= currentTime) prev = {station: stations[i], time: t};
-            if (t > currentTime && !next) next = {station: stations[i], time: t};
+            const t = timeToSeconds(train.times[stations[i]]);
+            if (t !== null && t <= currentSec) prev = {station: stations[i], time: t};
+            if (t !== null && t > currentSec && !next) next = {station: stations[i], time: t};
           }
 
           if (!prev || !next) return;
@@ -151,7 +162,7 @@
           const p2 = stationPositions[next.station];
           if (!p1 || !p2) return;
 
-          const ratio = (currentTime - prev.time) / (next.time - prev.time);
+          const ratio = (currentSec - prev.time) / (next.time - prev.time);
           const x = p1.x + (p2.x - p1.x) * ratio;
           const y = p1.y + (p2.y - p1.y) * ratio + (train.direction === "up" ? -20 : 20);
 
@@ -181,7 +192,7 @@
         });
       }
 
-      setInterval(update, 1000); // 実時間に合わせて1秒ごとに更新
+      setInterval(update, 1000);
     });
   </script>
 </body>
