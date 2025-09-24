@@ -49,7 +49,7 @@
     setInterval(updateClock, 1000);
     updateClock();
 
-    // ===== 駅データ（例: Y字分岐あり） =====
+    // ===== 駅データ =====
     const stationsUp = [
       "松江温泉","ガーデン前","朝日ヶ丘","長江","秋鹿町","フォーゲル","高ノ宮","津ノ森","伊野灘","一畑口",
       "園","湖遊館新駅","布崎","雲州平田","旅伏","美談","大寺","川跡","武志","大津町","科学館前","電鉄出雲市"
@@ -58,24 +58,43 @@
       "川跡","高浜","遥堪","浜山公園北口","出雲大社前"
     ];
 
-    // 座標割り当て
+    // 座標設定
+    const baseX = 200;
+    const baseY = 200;
+    const spacing = 40;
+    const branchDrop = 80;  // 川跡から下に落とす距離
+
     const stationPos = {};
     stationsUp.forEach((name, i) => {
-      stationPos[name] = {x: 200 + i * 40, y: 200};
-    });
-    stationsDown.forEach((name, i) => {
-      stationPos[name] = {x: 200 + i * 40, y: 300};
+      stationPos[name] = {x: baseX + i * spacing, y: baseY};
     });
 
-    // 線路（本線 + 分岐）
+    const kawaPos = stationPos["川跡"];
+    const branchStart = {x: kawaPos.x, y: kawaPos.y + branchDrop};
+
+    stationsDown.forEach((name, i) => {
+      if (i === 0) {
+        stationPos[name] = kawaPos; // 川跡は本線上
+      } else {
+        stationPos[name] = {x: branchStart.x + i * spacing, y: branchStart.y};
+      }
+    });
+
+    // 線路描画
     svg.append("polyline")
       .attr("points", stationsUp.map(s => `${stationPos[s].x},${stationPos[s].y}`).join(" "))
       .attr("class", "line");
-    svg.append("polyline")
-      .attr("points", stationsDown.map(s => `${stationPos[s].x},${stationPos[s].y}`).join(" "))
+
+    svg.append("line")
+      .attr("x1", kawaPos.x).attr("y1", kawaPos.y)
+      .attr("x2", branchStart.x).attr("y2", branchStart.y)
       .attr("class", "line");
 
-    // 駅名表示
+    svg.append("polyline")
+      .attr("points", stationsDown.slice(1).map(s => `${stationPos[s].x},${stationPos[s].y}`).join(" "))
+      .attr("class", "line");
+
+    // 駅マーク
     Object.entries(stationPos).forEach(([name, pos]) => {
       svg.append("circle")
         .attr("cx", pos.x)
@@ -94,13 +113,11 @@
     d3.csv("trains.csv").then(function(data) {
       const trainGroup = svg.append("g").attr("class", "trains");
 
-      // 時刻文字列（0600等）を数値に変換
       function parseTime(t) {
         if (!t || isNaN(t)) return null;
         return parseInt(t);
       }
 
-      // 補間で現在位置を計算
       function getTrainPosition(d, now) {
         const stations = Object.keys(d).slice(3); // train_id, train_name, direction を除く
         let prev = null, next = null;
@@ -111,7 +128,7 @@
           if (t && t > now) { next = {station: stations[i], time: t}; break; }
         }
 
-        if (!prev || !next) return null; // 始発前・終着後
+        if (!prev || !next) return null;
 
         const p1 = stationPos[prev.station];
         const p2 = stationPos[next.station];
@@ -124,7 +141,6 @@
         return {x, y, direction: d.direction};
       }
 
-      // アイコン色分け
       function getStyle(train_name) {
         if (train_name.includes("A")) return {fill: "red", text: "white"};
         if (train_name.includes("B")) return {fill: "green", text: "white"};
@@ -139,12 +155,11 @@
       }
 
       function updateTrains() {
-        const now = parseInt(formatTime(new Date())); // HHMM形式の数値
+        const now = parseInt(formatTime(new Date())); // HHMM形式
 
         const trains = trainGroup.selectAll("g.train")
           .data(data);
 
-        // enter
         const trainsEnter = trains.enter()
           .append("g")
           .attr("class", "train");
@@ -155,7 +170,6 @@
           .attr("dominant-baseline", "middle")
           .attr("font-size", "12px");
 
-        // update
         trains.merge(trainsEnter).each(function(d) {
           const g = d3.select(this);
           const pos = getTrainPosition(d, now);
