@@ -13,7 +13,7 @@
 </head>
 <body>
   <div id="time"></div>
-  <svg id="map" width="1600" height="500"></svg>
+  <svg id="map" width="2000" height="600"></svg>
 
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script>
@@ -21,10 +21,10 @@
     const branchStations = ["川跡.1","高浜","遥堪","浜山公園北口","出雲大社前"];
 
     const svg = d3.select("#map");
-    const spacing = 60; // 駅間隔
-    const offsetY = 100;
+    const spacing = 80; // 駅間隔を広げる
+    const offsetY = 120;
 
-    // 本線描画
+    // 本線
     svg.append("line")
       .attr("x1", 50).attr("y1", offsetY)
       .attr("x2", 50 + (mainStations.length-1)*spacing).attr("y2", offsetY)
@@ -36,9 +36,9 @@
       svg.append("text").attr("x", x).attr("y", y-10).text(s).attr("class","station");
     });
 
-    // 支線（川跡駅の真下から垂直に下ろす）
+    // 支線
     const kawaX = 50 + (mainStations.indexOf("川跡"))*spacing;
-    const branchY = offsetY + 60;
+    const branchY = offsetY + 80;
     svg.append("line").attr("x1", kawaX).attr("y1", offsetY).attr("x2", kawaX).attr("y2", branchY).attr("stroke", "black");
     svg.append("line")
       .attr("x1", kawaX).attr("y1", branchY)
@@ -85,12 +85,20 @@
 
         trains.each(function(d){
           const dir = d.direction;
-          const stations = dir==="up" ? mainStations.concat(branchStations.slice(1)) : mainStations.slice().reverse().concat(branchStations.slice(1).reverse());
+          const stations = dir==="up"
+            ? mainStations.concat(branchStations.slice(1))
+            : mainStations.slice().reverse().concat(branchStations.slice(1).reverse());
+
+          // 駅ごとの時刻リストを作成
+          const times = stations.map(s=>({s, t: parseTime(d[s])})).filter(o=>o.t!==null);
+
+          if(times.length<2){ d3.select(this).attr("display","none"); return; }
+
           let prev=null,next=null;
-          for(let s of stations){
-            const t=parseTime(d[s]);
-            if(!t) continue;
-            if(t<=nowMin) prev={s,t}; else { next={s,t}; break; }
+          for(let i=0;i<times.length-1;i++){
+            if(times[i].t<=nowMin && nowMin<=times[i+1].t){
+              prev=times[i]; next=times[i+1]; break;
+            }
           }
           if(!prev||!next){ d3.select(this).attr("display","none"); return; }
           d3.select(this).attr("display",null);
@@ -113,7 +121,7 @@
 
           const g=d3.select(this);
           const c=trainColor(d.train_name);
-          g.attr("transform",`translate(${x},${y+(dir==="up"?-20:20)})`);
+          g.attr("transform",`translate(${x},${y+(dir==="up"?-25:25)})`);
           g.select("polygon").attr("points",points).attr("fill",c.fill).attr("stroke",c.stroke||"black");
           g.select("text").text(d.train_name).attr("fill",c.text);
         });
