@@ -2,331 +2,382 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8"/>
-<title>列車走行表示（修正版）</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>列車走行表示（trains.csv対応）</title>
 <style>
-  body { font-family: system-ui, "Noto Sans JP", sans-serif; background:#f7f7fb; margin:0; padding:12px; }
-  #time { text-align:center; font-size:22px; font-weight:600; margin-bottom:10px; }
-  #map { position:relative; width:100%; min-width:1200px; height:700px; background: #fff; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.06); overflow:hidden; }
-  .station { position:absolute; transform: translate(-50%, -50%); text-align:center; font-size:13px; pointer-events:none; }
-  .station .dot { width:10px; height:10px; border-radius:50%; background:#111; margin:0 auto 6px; }
-  .track-h { position:absolute; height:2px; background:#111; top:50%; transform:translateY(-50%); }
-  .track-v { position:absolute; width:2px; background:#111; left:50%; transform:translateX(-50%); }
-  .train { position:absolute; transform: translate(-50%,-50%); white-space:nowrap; font-size:13px; display:inline-flex; align-items:center; justify-content:center; padding:6px 12px; box-sizing:content-box; border:2px solid #111; }
+  :root{
+    --map-bg:#fff;
+    --track:#111;
+  }
+  body{font-family:system-ui, "Noto Sans JP", sans-serif; margin:0; background:#f2f5f8; color:#111}
+  #topbar{padding:12px 16px; text-align:center; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,0.06)}
+  #time {font-size:20px; font-weight:700}
+  #mapWrap{padding:18px; overflow:auto}
+  #map{position:relative; width:1600px; height:700px; margin:0 auto; background:var(--map-bg); border-radius:8px; box-shadow:0 2px 12px rgba(0,0,0,0.06)}
+  .track-h{position:absolute; height:4px; background:var(--track); transform:translateY(-50%)}
+  .track-v{position:absolute; width:4px; background:var(--track); transform:translateX(-50%)}
+  .station{position:absolute; transform:translate(-50%,-50%); text-align:center; pointer-events:none}
+  .station .dot{width:10px;height:10px;border-radius:50%;background:#111;margin-bottom:6px}
+  .train{
+    position:absolute;
+    transform:translate(-50%,-50%);
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    white-space:nowrap;
+    font-size:13px;
+    line-height:1;
+    height:34px;
+    padding:6px 12px;
+    box-sizing:content-box;
+    border:2px solid #222;
+    transition: transform 0.9s linear, left 0.9s linear, top 0.9s linear;
+  }
   /* 右尖り */
-  .train.up { clip-path: polygon(0% 0%, 85% 0%, 100% 50%, 85% 100%, 0% 100%); }
+  .train.up{ clip-path: polygon(0% 0%, 85% 0%, 100% 50%, 85% 100%, 0% 100%); }
   /* 左尖り */
-  .train.down { clip-path: polygon(15% 0%, 100% 0%, 100% 100%, 15% 100%, 0% 50%); }
+  .train.down{ clip-path: polygon(15% 0%, 100% 0%, 100% 100%, 15% 100%, 0% 50%); }
 
-  /* 色 classes */
-  .A{background:red;color:#fff;border-color:#800}
-  .B{background:green;color:#fff;border-color:#064}
-  .C{background:yellow;color:#000;border-color:#885}
-  .D{background:blue;color:#000;border-color:#012}
-  .E{background:transparent;color:#000;border-color:#111}
-  .F{background:cyan;color:#000;border-color:#088}
-  .G{background:orange;color:#fff;border-color:#a63}
-  .H{background:pink;color:#000;border-color:#c33}
-  .I{background:yellowgreen;color:#000;border-color:#5a5}
+  /* color classes */
+  .A{background:#d33;color:#fff;border-color:#800}
+  .B{background:#0a7;color:#fff;border-color:#045}
+  .C{background:#ffd54f;color:#111;border-color:#b07}
+  .D{background:#4da6ff;color:#000;border-color:#114}
+  .E{background:transparent;color:#111;border-color:#222}
+  .F{background:#80deea;color:#000;border-color:#078}
+  .G{background:#ff9800;color:#fff;border-color:#a64}
+  .H{background:#f8bbd0;color:#000;border-color:#c33}
+  .I{background:#c5e1a5;color:#000;border-color:#485}
   .defaultColor{background:#ddd;color:#111;border-color:#999}
+  /* small note */
+  .note{position:absolute; left:12px; bottom:8px; font-size:12px; color:#444}
 </style>
 </head>
 <body>
-  <div id="time">--:--:--</div>
-  <div id="map"></div>
+  <div id="topbar">
+    <div id="time">--:--:--</div>
+  </div>
+
+  <div id="mapWrap">
+    <div id="map"></div>
+  </div>
 
 <script>
-// ======= 固定データ =======
+// ======= 固定駅リスト（本線・支線） =======
 const mainStations = ["松江温泉","ガーデン前","朝日ヶ丘","長江","秋鹿町","フォーゲル","高ノ宮","津ノ森","伊野灘","一畑口","園","湖遊館新駅","布崎","雲州平田","旅伏","美談","大寺","川跡","武志","大津町","科学館前","電鉄出雲市"];
 const branchStations = ["川跡","高浜","遥堪","浜山公園北口","出雲大社前"];
 
-// レイアウト設定（調整可）
-const startX = 120;
+// ======= レイアウト設定（調節可） =======
+const startX = 80;
 const startY_main = 180;
-const spacingX = 150;   // 横間隔（広く）
-const branchDrop = 120; // 川跡から垂直に下ろす距離
-const branchSpacingX = spacingX; // 支線横間隔
-const offsetUp = 50;    // up 列車の縦オフセット（駅表示の上）
-const offsetDown = 60;  // down 列車の縦オフセット（駅表示の下）
+const spacingX = 120;    // 横間隔（広め）
+const branchDrop = 140;  // 川跡から垂直に下ろす距離
+const offsetUp = 58;     // up 列車の垂直オフセット（上側）
+const offsetDown = 64;   // down 列車の垂直オフセット（下側）
 
-// map 要素
-const mapEl = document.getElementById("map");
+// map element
+const mapEl = document.getElementById('map');
 
-// キャンバス用コンテキスト（テキスト幅測定）
-const measureCanvas = document.createElement("canvas");
-const measureCtx = measureCanvas.getContext("2d");
-measureCtx.font = "13px system-ui, 'Noto Sans JP', sans-serif";
+// canvas for measuring text width
+const measureCanvas = document.createElement('canvas');
+const mctx = measureCanvas.getContext('2d');
+mctx.font = "13px system-ui, 'Noto Sans JP', sans-serif";
 
-// ======= 駅座標作成 =======
-const posMain = mainStations.map((st, i) => ({name: st, x: startX + i*spacingX, y: startY_main}));
+// build station positions:
+// main
+const posMain = mainStations.map((s,i)=>({name:s, x: startX + i*spacingX, y: startY_main}));
+// find kawaIndex
 const kawaIndex = mainStations.indexOf("川跡");
-if (kawaIndex < 0) throw new Error("mainStations に川跡が見つかりません");
-
+if (kawaIndex < 0) throw new Error("mainStations に川跡がありません");
+// branch
 const branchStartX = posMain[kawaIndex].x;
 const branchStartY = posMain[kawaIndex].y + branchDrop;
-const posBranch = branchStations.map((st,i) => {
-  if(i===0) return {name:st, x: posMain[kawaIndex].x, y: posMain[kawaIndex].y}; // 川跡は本線と共有
-  return {name:st, x: branchStartX + (i-1)*branchSpacingX, y: branchStartY};
+const posBranch = branchStations.map((s,i)=> {
+  if (i===0) return {name:s, x: branchStartX, y: posMain[kawaIndex].y}; // 川跡
+  return {name:s, x: branchStartX + (i-1)*spacingX, y: branchStartY};
 });
 
-// station position lookup by name for ease
-const stationPosMainMap = {};
-posMain.forEach(p => stationPosMainMap[p.name] = {x:p.x,y:p.y});
-const stationPosBranchMap = {};
-posBranch.forEach((p, idx) => {
-  // branchStations[0] = 川跡 を main と同じ位置に
-  if (idx === 0) stationPosBranchMap[p.name] = {x:p.x,y:p.y};
-  else stationPosBranchMap[p.name] = {x:p.x,y:p.y};
-});
+// lookup maps
+const stationPosMap = {};
+posMain.forEach(p=> stationPosMap[p.name] = {x:p.x,y:p.y});
+posBranch.forEach(p=> stationPosMap[p.name] = {x:p.x,y:p.y});
 
-// draw static map (tracks + station labels)
-function drawStaticMap() {
-  mapEl.innerHTML = ""; // clear
-  // draw main horizontal track segments (as divs)
-  // place stations as divs
-  // We'll use absolute positioned elements
-  // container is mapEl; its local coordinates start at 0,0
-  // create line segments as simple divs for visual
-  // main track: continuous horizontal bar from first to last
-  const firstMain = posMain[0]; const lastMain = posMain[posMain.length-1];
-  // draw horizontal track (as full length)
-  const trackMain = document.createElement("div");
-  trackMain.style.position = "absolute";
-  trackMain.style.left = (firstMain.x) + "px";
-  trackMain.style.top = (firstMain.y) + "px";
-  trackMain.style.width = (lastMain.x - firstMain.x) + "px";
-  trackMain.style.height = "2px";
-  trackMain.style.background = "#111";
-  trackMain.style.transform = "translateY(-50%)";
+// draw static map (tracks + stations)
+function drawStaticMap(){
+  mapEl.innerHTML = "";
+  // main horizontal track
+  const first = posMain[0], last = posMain[posMain.length-1];
+  const trackMain = document.createElement('div');
+  trackMain.className = 'track-h';
+  trackMain.style.left = first.x + 'px';
+  trackMain.style.top = first.y + 'px';
+  trackMain.style.width = (last.x - first.x) + 'px';
   mapEl.appendChild(trackMain);
 
-  // draw branch vertical then branch horizontal
-  const vline = document.createElement("div");
-  vline.style.position = "absolute";
-  vline.style.left = (branchStartX) + "px";
-  vline.style.top = (posMain[kawaIndex].y) + "px";
-  vline.style.width = "2px";
-  vline.style.height = (branchStartY - posMain[kawaIndex].y) + "px";
-  vline.style.background = "#111";
-  mapEl.appendChild(vline);
+  // branch vertical line from 川跡 down
+  const v = document.createElement('div');
+  v.className = 'track-v';
+  v.style.left = branchStartX + 'px';
+  v.style.top = posMain[kawaIndex].y + 'px';
+  v.style.height = (branchStartY - posMain[kawaIndex].y) + 'px';
+  mapEl.appendChild(v);
 
-  const lastBranch = posBranch[posBranch.length-1];
-  const hline = document.createElement("div");
-  hline.style.position = "absolute";
-  hline.style.left = (posBranch[1].x - spacingX) + "px";
-  hline.style.top = (branchStartY) + "px";
-  hline.style.height = "2px";
-  hline.style.width = (lastBranch.x - (posBranch[1].x - spacingX)) + "px";
-  hline.style.background = "#111";
-  mapEl.appendChild(hline);
+  // branch horizontal (start from posBranch[1].x - spacingX to last branch x)
+  const bxStart = posBranch[1].x - spacingX;
+  const bxEnd = posBranch[posBranch.length-1].x;
+  const trackBranchH = document.createElement('div');
+  trackBranchH.className = 'track-h';
+  trackBranchH.style.left = bxStart + 'px';
+  trackBranchH.style.top = branchStartY + 'px';
+  trackBranchH.style.width = (bxEnd - bxStart) + 'px';
+  mapEl.appendChild(trackBranchH);
 
-  // add stations (main)
-  posMain.forEach(p => {
-    const s = document.createElement("div");
-    s.className = "station";
-    s.style.left = p.x + "px";
-    s.style.top = p.y + "px";
-    s.innerHTML = `<div class="dot" style="width:10px;height:10px;border-radius:50%;background:#111;margin-bottom:6px;"></div><div style="font-size:13px;">${p.name}</div>`;
+  // stations on main
+  posMain.forEach(p=>{
+    const s = document.createElement('div');
+    s.className = 'station';
+    s.style.left = p.x + 'px';
+    s.style.top = p.y + 'px';
+    s.innerHTML = `<div class="dot"></div><div style="font-size:13px">${p.name}</div>`;
     mapEl.appendChild(s);
   });
-  // add branch stations (excluding first 川跡 since already drawn)
-  posBranch.forEach((p, idx) => {
-    if (idx===0) return; // 川跡は main に表示済み
-    const s = document.createElement("div");
-    s.className = "station";
-    s.style.left = p.x + "px";
-    s.style.top = p.y + "px";
-    s.innerHTML = `<div class="dot" style="width:10px;height:10px;border-radius:50%;background:#111;margin-bottom:6px;"></div><div style="font-size:13px;">${p.name}</div>`;
+  // stations on branch (exclude first which is 川跡 already)
+  posBranch.forEach((p,idx)=>{
+    if (idx===0) return;
+    const s = document.createElement('div');
+    s.className = 'station';
+    s.style.left = p.x + 'px';
+    s.style.top = p.y + 'px';
+    s.innerHTML = `<div class="dot"></div><div style="font-size:13px">${p.name}</div>`;
     mapEl.appendChild(s);
   });
+
+  // small note
+  const note = document.createElement('div');
+  note.className = 'note';
+  note.textContent = '列車は1秒ごとに更新されます';
+  mapEl.appendChild(note);
 }
 
-// utility: measure text width
-function measureTextWidth(text) {
-  measureCtx.font = "13px system-ui, 'Noto Sans JP', sans-serif";
-  return measureCtx.measureText(text).width;
-}
-
-// parse CSV while preserving header order and duplicate headers
-function parseCSVPreserveColumns(text) {
-  // split lines robustly (allow CRLF)
-  const lines = text.replace(/\r/g,"").split("\n").filter(l => l.trim() !== "");
-  if (lines.length < 2) return {headers:[], rows:[]};
-  // naive CSV split by comma (assumes no quoted commas). If your CSV can contain commas inside quotes, let me know and I'll switch to a robust parser.
-  const headers = lines[0].split(",").map(h => h.trim());
-  const rows = lines.slice(1).map(line => line.split(",").map(c => c.trim()));
+// parse CSV while preserving columns order
+function parseCSVPreserve(text){
+  const lines = text.replace(/\r/g,'').split('\n').filter(l=>l.trim()!=='');
+  const headers = lines[0].split(',').map(h=>h.trim());
+  const rows = lines.slice(1).map(l=>{
+    // simple split (assume no quoted commas)
+    const cols = l.split(',').map(c=>c.trim());
+    // pad if short
+    while(cols.length < headers.length) cols.push('');
+    return cols;
+  });
   return {headers, rows};
 }
 
-// convert "HHMM" string (e.g. "0600") to minutes since midnight
-function hhmmToMinutes(s) {
-  if (!s) return null;
-  s = String(s).trim();
-  if (s === "") return null;
-  // strip quotes if present
-  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
-    s = s.slice(1,-1);
+// convert CSV cell to minutes (handles 637, 637.0, "0637")
+function cellToMinutes(cell){
+  if (cell === null || cell === undefined) return null;
+  let s = String(cell).trim();
+  if (s === '' || s.toLowerCase() === 'nan') return null;
+  // if numeric like 637.0
+  if (/^\d+(\.\d+)?$/.test(s)){
+    // take integer part
+    s = String(Math.floor(Number(s)));
   }
-  // must be 3 or 4 digits ideally, but we'll pad left
-  if (!/^\d+$/.test(s)) return null;
-  s = s.padStart(4,"0");
+  // remove quotes
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) s = s.slice(1,-1);
+  // pad to 4
+  s = s.padStart(4,'0');
+  if (!/^\d{4}$/.test(s)) return null;
   const hh = parseInt(s.slice(0,2),10);
   const mm = parseInt(s.slice(2,4),10);
   if (isNaN(hh) || isNaN(mm)) return null;
   return hh*60 + mm;
 }
 
-// construct headerStationsPositions array aligned with CSV header columns (columns after first 3)
-function buildHeaderPositions(headers) {
-  const headerStations = headers.slice(3); // array of station names in CSV order
-  const positions = headerStations.map((name, idx) => {
-    // if idx corresponds to mainStations part
-    if (idx < mainStations.length) {
-      const st = mainStations[idx];
-      return {name: st, x: stationPosMainMap[st].x, y: stationPosMainMap[st].y};
-    } else {
-      const branchIdx = idx - mainStations.length;
-      const st = branchStations[branchIdx];
-      // branch pos: for branchIdx==0 it's 川跡 (same as main), else use posBranch entry
-      if (branchIdx === 0) return {name: st, x: stationPosMainMap["川跡"].x, y: stationPosMainMap["川跡"].y};
-      const pb = posBranch[branchIdx];
-      return {name: st, x: pb.x, y: pb.y};
-    }
+// build headerPositions (assume CSV header after first 3 columns lists mainStations then branchStations.slice(1))
+// We'll construct expectedStations = mainStations.concat(branchStations.slice(1))
+function buildHeaderPositions(headers){
+  const expected = mainStations.concat(branchStations.slice(1));
+  const positions = expected.map(st=>{
+    // for branchStations.slice(1) use posBranch index
+    const pos = stationPosMapLookup(st);
+    return {station:st, x:pos.x, y:pos.y};
   });
-  return {headerStations: headerStations, positions};
+  return {expected, positions};
 }
 
-// main drawing function (reads trainsRows, headers)
-async function run() {
+function stationPosMapLookup(st){
+  // st may be main station or branch station (branch names are same as branchStations)
+  if (stationPosMap[st]) return stationPosMap[st];
+  // fallback: if name equals 川跡 and not found, return main 川跡
+  if (st === "川跡") return stationPosMap["川跡"];
+  // if appended .1 naming present, remove .1
+  const base = st.replace('.1','');
+  return stationPosMap[base] || {x:startX, y:startY_main};
+}
+
+// Create or reuse train DOM elements keyed by train_id
+const trainElements = new Map();
+
+function ensureTrainElement(train_id, train_name, direction){
+  let el = trainElements.get(train_id);
+  if (!el){
+    el = document.createElement('div');
+    el.className = 'train';
+    // add direction class
+    el.classList.add(direction === 'down' ? 'down' : 'up');
+    // default color
+    el.classList.add('defaultColor');
+    el.textContent = train_name;
+    el.style.position = 'absolute';
+    el.style.left = '-9999px';
+    el.style.top = '-9999px';
+    mapEl.appendChild(el);
+    trainElements.set(train_id, el);
+  }
+  return el;
+}
+
+// set color class according to train_name
+function applyColorClass(el, train_name){
+  // remove known classes first
+  ["A","B","C","D","E","F","G","H","I","defaultColor"].forEach(cl=>el.classList.remove(cl));
+  let applied=false;
+  for (const c of ["A","B","C","D","E","F","G","H","I"]){
+    if (train_name && train_name.indexOf(c) !== -1) { el.classList.add(c); applied=true; break; }
+  }
+  if (!applied) el.classList.add('defaultColor');
+}
+
+// Main runner: load CSV and start update loop
+async function run(){
   drawStaticMap();
 
-  // load CSV
   let csvText;
   try {
-    const res = await fetch("trains.csv");
+    const res = await fetch('trains.csv');
+    if (!res.ok) throw new Error('fetch failed');
     csvText = await res.text();
-  } catch (e) {
+  } catch(e){
     console.error(e);
-    alert("trains.csv の読み込みに失敗しました（ファイルが存在するか確認してください）。");
+    alert('trains.csv の読み込みに失敗しました。同じディレクトリに trains.csv を置いて下さい。');
     return;
   }
 
-  const parsed = parseCSVPreserveColumns(csvText);
-  const headers = parsed.headers; // array of header names (may contain duplicates)
-  const rows = parsed.rows;       // array of arrays (columns)
+  const parsed = parseCSVPreserve(csvText);
+  const headers = parsed.headers; // array
+  const rows = parsed.rows;       // array of arrays
 
-  if (headers.length < 4) {
-    alert("CSV ヘッダーの形式が不正です。最初の3列は train_id,train_name,direction の順で、続けて駅名の列が必要です。");
-    return;
+  // build header positions (index-aligned)
+  const expectedStations = mainStations.concat(branchStations.slice(1)); // length should match headers.length-3
+  // If header length mismatch, try to still map by index up to min length
+  const headerCount = Math.max(0, headers.length - 3);
+  const usedCount = Math.min(headerCount, expectedStations.length);
+  const headerPositions = [];
+  for (let i=0;i<usedCount;i++){
+    const st = expectedStations[i];
+    const pos = stationPosMapLookup(st);
+    headerPositions.push({station:st, x:pos.x, y:pos.y});
   }
 
-  // build header -> positions mapping (for columns after column index 3)
-  const {headerStations, positions: headerPositions} = buildHeaderPositions(headers);
-
-  // update clock every second
-  function updateClockDisplay() {
+  // update clock display
+  const timeEl = document.getElementById('time');
+  function updateClockNow(){
     const now = new Date();
-    const s = now.toLocaleTimeString('ja-JP', {hour12:false});
-    document.getElementById("time").textContent = s;
+    timeEl.textContent = now.toLocaleTimeString('ja-JP',{hour12:false});
   }
-  updateClockDisplay();
-  setInterval(updateClockDisplay, 1000);
+  updateClockNow();
+  setInterval(updateClockNow, 1000);
 
-  // redraw trains each second
-  function updateTrains() {
-    // remove existing trains
-    document.querySelectorAll(".train").forEach(e => e.remove());
-
+  // update loop every 1 second
+  function updateOnce(){
     const now = new Date();
-    const nowM = now.getHours()*60 + now.getMinutes();
+    const nowMinutes = now.getHours()*60 + now.getMinutes();
 
-    // iterate rows (each row is an array of columns)
-    rows.forEach(cols => {
-      const train_id = cols[0] || "";
-      const train_name = cols[1] || "";
-      const direction = (cols[2] || "").toLowerCase();
+    // for each row (train)
+    rows.forEach(cols=>{
+      const train_id = cols[0] || Math.random().toString(36).slice(2,8);
+      const train_name = cols[1] || '';
+      const direction = (cols[2] || '').toLowerCase();
 
-      // collect times aligned to headerPositions (columns 3 ..)
-      const times = headerPositions.map((_, j) => {
-        const colIdx = 3 + j;
-        const raw = (colIdx < cols.length) ? cols[colIdx] : "";
-        return hhmmToMinutes(raw);
+      // create element if not exists
+      const el = ensureTrainElement(train_id, train_name, direction);
+      // update displayed name if changed
+      if (el.textContent !== train_name) el.textContent = train_name;
+      applyColorClass(el, train_name);
+
+      // compute times array aligned to headerPositions length
+      const times = headerPositions.map((hp, idx)=>{
+        const colIdx = 3 + idx;
+        const raw = (colIdx < cols.length) ? cols[colIdx] : '';
+        return cellToMinutes(raw);
       });
 
-      // determine earliest and latest valid times (to hide before first / after last)
-      const validTimes = times.filter(t => t !== null);
-      if (validTimes.length < 2) return; // not enough info
+      // find valid earliest/latest times (to hide outside)
+      const valid = times.filter(t=>t !== null);
+      if (valid.length < 2) { el.style.left='-9999px'; el.style.top='-9999px'; return; }
+      const firstT = Math.min(...valid);
+      const lastT = Math.max(...valid);
+      if (nowMinutes < firstT || nowMinutes > lastT){ el.style.left='-9999px'; el.style.top='-9999px'; return; }
 
-      const firstT = Math.min(...validTimes);
-      const lastT = Math.max(...validTimes);
-      if (nowM < firstT || nowM > lastT) {
-        // 始発前または終着後は表示しない
-        return;
-      }
-
-      // find adjacent segment where both times exist and now is between them
-      let drawn = false;
-      for (let j = 0; j < times.length - 1; j++) {
+      // find adjacent segment where both times exist and now between them
+      let placed=false;
+      for (let j=0;j<times.length-1;j++){
         const tA = times[j];
         const tB = times[j+1];
         if (tA === null || tB === null) continue;
-        // check if now is between tA and tB (inclusive)
-        const low = Math.min(tA, tB), high = Math.max(tA, tB);
-        if (nowM < low || nowM > high) continue;
-        // avoid zero-length
+        const low = Math.min(tA,tB), high = Math.max(tA,tB);
+        if (nowMinutes < low || nowMinutes > high) continue;
         if (tA === tB) continue;
 
-        // compute ratio along physical positions from headerPositions[j] -> headerPositions[j+1]
-        const ratio = (nowM - tA) / (tB - tA); // denominator may be negative, ratio in [0,1]
+        // compute ratio using (now - tA)/(tB - tA) (works even if decreasing)
+        const ratio = (nowMinutes - tA) / (tB - tA);
         const p1 = headerPositions[j];
         const p2 = headerPositions[j+1];
+        // guard missing pos
+        if (!p1 || !p2) continue;
         const x = p1.x + (p2.x - p1.x) * ratio;
         const yBase = p1.y + (p2.y - p1.y) * ratio;
 
-        // vertical offset by direction (up above stations, down below)
-        const y = (direction === "up") ? (yBase - offsetUp) : (yBase + offsetDown);
+        // set vertical offset by direction
+        const y = (direction === 'up') ? (yBase - offsetUp) : (yBase + offsetDown);
 
-        // create train element
-        const div = document.createElement("div");
-        div.className = "train " + (direction === "down" ? "down" : "up");
-        // color class by train_name contents
-        let applied = false;
-        ["A","B","C","D","E","F","G","H","I"].forEach(ch=>{
-          if (train_name.includes(ch)) { div.classList.add(ch); applied = true; }
-        });
-        if (!applied) div.classList.add("defaultColor");
+        // size by text width
+        const textW = Math.ceil(mctx.measureText(train_name || '').width);
+        const horizPad = 24;
+        const w = Math.max(40, textW + horizPad);
+        el.style.width = w + 'px';
+        el.style.height = '34px';
+        el.style.lineHeight = '34px';
 
-        // measure width for text and set padding/size so clip-path scales nicely
-        const textW = measureTextWidth(train_name);
-        // set element size: width = textW + horizontalPadding, height ~ line-height
-        const horizPad = 18; // left+right total padding approximate
-        const w = Math.ceil(textW + horizPad);
-        const h = 28; // fixed height for clip-path visuals
+        // set transform using left/top so transitions animate
+        el.style.left = x + 'px';
+        el.style.top = y + 'px';
+        // ensure correct direction class
+        el.classList.toggle('up', direction !== 'down');
+        el.classList.toggle('down', direction === 'down');
 
-        div.style.width = w + "px";
-        div.style.height = h + "px";
-        div.style.lineHeight = h + "px";
-        div.style.left = x + "px";
-        div.style.top = y + "px";
-        div.textContent = train_name;
-
-        // append to map
-        mapEl.appendChild(div);
-
-        drawn = true;
-        break; // only one segment per train (first matching adjacent segment)
+        placed = true;
+        break;
       }
-      // if not drawn, nothing to do (either between gaps or no adjacent segment)
+      if (!placed){
+        // not on any known adjacent segment: hide
+        el.style.left = '-9999px';
+        el.style.top = '-9999px';
+      }
     });
   }
 
-  updateTrains();
-  setInterval(updateTrains, 1000);
+  // initial update
+  updateOnce();
+  // update every 1s
+  setInterval(updateOnce, 1000);
 }
 
-// run
+// initialize map and run
 drawStaticMap();
 run();
+
 </script>
 </body>
 </html>
