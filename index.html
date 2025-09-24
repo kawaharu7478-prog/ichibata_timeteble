@@ -21,15 +21,19 @@
     }
     .branch-track { position: absolute; width: 2px; background: black; }
     .train {
-      position: absolute; padding: 2px 6px; border: 2px solid black;
-      border-radius: 6px; white-space: nowrap; font-size: 12px;
+      position: absolute; padding: 2px 8px; font-size: 12px;
+      white-space: nowrap; text-align: center;
+      clip-path: polygon(0% 0%, 90% 0%, 100% 50%, 90% 100%, 0% 100%);
+    }
+    .train.down {
+      clip-path: polygon(10% 0%, 100% 0%, 100% 100%, 10% 100%, 0% 50%);
     }
     /* 色分けルール */
     .A { background: red; color: white; }
     .B { background: green; color: white; }
     .C { background: yellow; color: black; }
     .D { background: blue; color: black; }
-    .E { background: transparent; color: black; }
+    .E { background: transparent; color: black; border: 2px solid black; }
     .F { background: cyan; color: black; }
     .G { background: orange; color: white; }
     .H { background: pink; color: black; }
@@ -83,7 +87,7 @@
         }
       });
 
-      // 川跡分岐（垂直に下ろして右へ）
+      // 川跡分岐
       const kawato = stationPos["川跡"];
       branchStations.forEach((st, i) => {
         const x = kawato.x + i * spacingX;
@@ -157,29 +161,33 @@
         const stations = mainStations.concat(branchStations.slice(1).map(s => s+"_branch"));
         const times = stations.map(st => toMinutes(train[st.replace("_branch","")]));
 
-        // 走行中区間を探す
         for (let i=0; i<stations.length-1; i++) {
           const t1 = times[i], t2 = times[i+1];
-          if (t1 && t2 && t1 <= nowM && nowM <= t2) {
-            const pos1 = stationPos[stations[i]];
-            const pos2 = stationPos[stations[i+1]];
-            const ratio = (nowM - t1)/(t2 - t1);
-            const x = pos1.x + (pos2.x - pos1.x)*ratio;
-            const yBase = pos1.y + (pos2.y - pos1.y)*ratio;
-            const y = (dir === "up") ? yBase - 30 : yBase + 40;
+          if (!t1 || !t2) continue;
 
-            const trainDiv = document.createElement("div");
-            trainDiv.className = "train";
-            trainDiv.textContent = train["train_name"];
-            // 色分け
-            "ABCDEFGHI".split("").forEach(c => {
-              if (train["train_name"].includes(c)) trainDiv.classList.add(c);
-            });
-            trainDiv.style.left = x + "px";
-            trainDiv.style.top = y + "px";
-            document.getElementById("map").appendChild(trainDiv);
-            break;
-          }
+          let inSection = false;
+          if (dir === "up" && t1 <= nowM && nowM <= t2) inSection = true;
+          if (dir === "down" && t2 <= nowM && nowM <= t1) inSection = true;
+          if (!inSection) continue;
+
+          const pos1 = stationPos[stations[i]];
+          const pos2 = stationPos[stations[i+1]];
+          const ratio = (nowM - t1) / (t2 - t1);
+          const r = (dir === "down") ? 1 - ratio : ratio;
+          const x = pos1.x + (pos2.x - pos1.x)*r;
+          const yBase = pos1.y + (pos2.y - pos1.y)*r;
+          const y = (dir === "up") ? yBase - 30 : yBase + 40;
+
+          const trainDiv = document.createElement("div");
+          trainDiv.className = "train " + dir;
+          trainDiv.textContent = train["train_name"];
+          "ABCDEFGHI".split("").forEach(c => {
+            if (train["train_name"].includes(c)) trainDiv.classList.add(c);
+          });
+          trainDiv.style.left = x + "px";
+          trainDiv.style.top = y + "px";
+          document.getElementById("map").appendChild(trainDiv);
+          break;
         }
       });
     }
