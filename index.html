@@ -8,8 +8,8 @@
     body { font-family: sans-serif; }
     .station { font-size: 12px; text-anchor: middle; }
     .line { stroke: black; stroke-width: 2; fill: none; }
-    .train { fill: orange; stroke: black; stroke-width: 1; }
     .time-label { font-size: 20px; font-weight: bold; text-anchor: middle; }
+    .train text { font-size: 10px; font-weight: bold; text-anchor: middle; dominant-baseline: middle; }
   </style>
 </head>
 <body>
@@ -28,18 +28,18 @@
     ];
     const branchStations = ["川跡","高浜","遥堪","浜山公園北口","出雲大社前"];
 
-    const stationSpacing = 40;  // 駅間隔を少し広めに
+    const stationSpacing = 40;  // 駅間隔
 
     // 本線座標
     const mainCoords = mainStations.map((d,i)=>({name:d,x:100+i*stationSpacing,y:200}));
-    // 支線（川跡から下に降りて平行に）
+    // 支線座標（川跡から下に降りて平行に）
     const kawatoMain = mainCoords.find(s=>s.name==="川跡");
     const branchCoords = branchStations.map((d,i)=>({
       name:d,
       x: kawatoMain.x + (i*stationSpacing),
       y: i===0 ? kawatoMain.y+stationSpacing : kawatoMain.y+stationSpacing+50
     }));
-    branchCoords[0].x = kawatoMain.x; // 川跡の位置を本線直下に
+    branchCoords[0].x = kawatoMain.x;
 
     // 線を描画
     svg.append("polyline")
@@ -76,6 +76,20 @@
       return hh*60+mm;
     }
 
+    // 列車の色と文字色を決定
+    function getTrainStyle(name) {
+      if (name.includes("A")) return {fill: "red", text: "white"};
+      if (name.includes("B")) return {fill: "green", text: "white"};
+      if (name.includes("C")) return {fill: "yellow", text: "black"};
+      if (name.includes("D")) return {fill: "blue", text: "black"};
+      if (name.includes("E")) return {fill: "none", text: "black"};
+      if (name.includes("F")) return {fill: "cyan", text: "black"};
+      if (name.includes("G")) return {fill: "orange", text: "white"};
+      if (name.includes("H")) return {fill: "pink", text: "black"};
+      if (name.includes("I")) return {fill: "lime", text: "black"};
+      return {fill: "gray", text: "white"};
+    }
+
     // 現在時刻をラベル表示
     const timeLabel = svg.append("text")
       .attr("x",width/2).attr("y",50)
@@ -98,13 +112,23 @@
         };
       });
 
-      // 列車アイコン
+      // 列車アイコン (gグループ)
       const trainElems = svg.selectAll(".train")
         .data(trains).enter()
-        .append("polygon")
+        .append("g")
         .attr("class","train")
-        .attr("points","-15,-10 15,0 -15,10")
         .attr("transform","translate(-100,-100)");
+
+      trainElems.append("polygon")
+        .attr("points","-15,-10 15,0 -15,10")
+        .attr("stroke","black")
+        .attr("stroke-width",1)
+        .attr("fill",d=>getTrainStyle(d.name).fill);
+
+      trainElems.append("text")
+        .attr("x",0).attr("y",0)
+        .text(d=>d.name)
+        .attr("fill",d=>getTrainStyle(d.name).text);
 
       // 座標表をまとめる
       const coords = {};
