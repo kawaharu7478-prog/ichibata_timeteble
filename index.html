@@ -1,127 +1,150 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>一畑電車 運行可視化</title>
-  <style>
-    body { font-family: sans-serif; text-align: center; }
-    #clock { font-size: 24px; margin: 10px; }
-    svg { border: 1px solid #ccc; }
-    .station { fill: black; }
-    .station-label { font-size: 12px; text-anchor: middle; }
-    .train { fill: red; }
-  </style>
+<meta charset="UTF-8">
+<title>列車位置表示</title>
+<style>
+  body { font-family: sans-serif; }
+  #clock { font-size: 20px; margin-bottom: 10px; }
+  svg { border: 1px solid #ccc; background: #f9f9f9; }
+  .station { font-size: 12px; text-anchor: middle; }
+  .line { stroke: black; stroke-width: 2; }
+  .train { stroke: black; stroke-width: 1; }
+</style>
 </head>
 <body>
-  <div id="clock"></div>
-  <svg id="map" width="1200" height="600"></svg>
+<div id="clock"></div>
+<svg id="map" width="1600" height="400"></svg>
+<script>
+// 本線と支線の駅リスト
+const mainStations = ["松江温泉","ガーデン前","朝日ヶ丘","長江","秋鹿町","フォーゲル","高ノ宮","津ノ森","伊野灘","一畑口","園","湖遊館新駅","布崎","雲州平田","旅伏","美談","大寺","川跡","武志","大津町","科学館前","電鉄出雲市"];
+const branchStations = ["川跡","高浜","遥堪","浜山公園北口","出雲大社前"];
 
-  <script>
-    // 本線・支線の駅
-    const mainLineStations = [
-      "松江温泉","ガーデン前","朝日ヶ丘","長江","秋鹿町","フォーゲル",
-      "高ノ宮","津ノ森","伊野灘","一畑口","園","湖遊館新駅","布崎","雲州平田",
-      "旅伏","美談","大寺","川跡","武志","大津町","科学館前","電鉄出雲市"
-    ];
-    const branchLineStations = [
-      "川跡","高浜","遥堪","浜山公園北口","出雲大社前"
-    ];
+const svg = document.getElementById("map");
+const stationPos = {};
 
-    // SVG 座標スケール
-    const stationGap = 45; // 本線の駅間隔
-    const branchGap = 45;  // 支線の駅間隔
-    const startX = 80, startY = 100;
+// 駅間隔
+const spacing = 70;
+const startX = 100;
+const baseY = 150;
 
-    const svg = document.getElementById("map");
+// 本線描画
+for (let i=0; i<mainStations.length; i++) {
+  let x = startX + i*spacing;
+  let y = baseY;
+  stationPos[mainStations[i]] = {x,y};
+  svg.innerHTML += `<circle cx="${x}" cy="${y}" r="4" fill="black"/>`;
+  svg.innerHTML += `<text x="${x}" y="${y-10}" class="station">${mainStations[i]}</text>`;
+  if (i>0) {
+    let px = startX + (i-1)*spacing;
+    svg.innerHTML += `<line x1="${px}" y1="${y}" x2="${x}" y2="${y}" class="line"/>`;
+  }
+}
 
-    // 本線を描画
-    mainLineStations.forEach((st, i) => {
-      let x = startX + i * stationGap;
-      let y = startY;
-      svg.innerHTML += `<circle class="station" cx="${x}" cy="${y}" r="4"/>`;
-      svg.innerHTML += `<text class="station-label" x="${x}" y="${y-10}">${st}</text>`;
-    });
-    // 本線線路
-    svg.innerHTML += `<line x1="${startX}" y1="${startY}" x2="${startX + (mainLineStations.length-1)*stationGap}" y2="${startY}" stroke="black"/>`;
+// 支線描画（本線の川跡駅の真下から並行）
+let kawatoMain = stationPos["川跡"];
+let branchStartY = kawatoMain.y + 70;
+for (let i=0; i<branchStations.length; i++) {
+  let x = kawatoMain.x + i*spacing;
+  let y = branchStartY;
+  stationPos[branchStations[i]] = {x,y};
+  svg.innerHTML += `<circle cx="${x}" cy="${y}" r="4" fill="black"/>`;
+  svg.innerHTML += `<text x="${x}" y="${y+20}" class="station">${branchStations[i]}</text>`;
+  if (i==0) {
+    svg.innerHTML += `<line x1="${kawatoMain.x}" y1="${kawatoMain.y}" x2="${x}" y2="${y}" class="line"/>`;
+  } else {
+    let px = kawatoMain.x + (i-1)*spacing;
+    svg.innerHTML += `<line x1="${px}" y1="${y}" x2="${x}" y2="${y}" class="line"/>`;
+  }
+}
 
-    // 支線を描画（川跡から下に分岐）
-    const kawatoX = startX + (mainLineStations.indexOf("川跡")) * stationGap;
-    const kawatoY = startY;
-    branchLineStations.forEach((st, i) => {
-      let x = kawatoX;
-      let y = kawatoY + i * branchGap;
-      svg.innerHTML += `<circle class="station" cx="${x}" cy="${y}" r="4"/>`;
-      if (i > 0) svg.innerHTML += `<text class="station-label" x="${x-40}" y="${y+5}">${st}</text>`;
-      else svg.innerHTML += `<text class="station-label" x="${x}" y="${y-15}">${st}</text>`;
-    });
-    svg.innerHTML += `<line x1="${kawatoX}" y1="${kawatoY}" x2="${kawatoX}" y2="${kawatoY + (branchLineStations.length-1)*branchGap}" stroke="black"/>`;
+// 列車色設定
+function getTrainColor(name) {
+  if (name.includes("A")) return {fill:"red",text:"white"};
+  if (name.includes("B")) return {fill:"green",text:"white"};
+  if (name.includes("C")) return {fill:"yellow",text:"black"};
+  if (name.includes("D")) return {fill:"blue",text:"black"};
+  if (name.includes("E")) return {fill:"none",text:"black"};
+  if (name.includes("F")) return {fill:"cyan",text:"black"};
+  if (name.includes("G")) return {fill:"orange",text:"white"};
+  if (name.includes("H")) return {fill:"pink",text:"black"};
+  if (name.includes("I")) return {fill:"lime",text:"black"};
+  return {fill:"white",text:"black"};
+}
 
-    // サンプル列車データ（CSVを読み込む代わりに直書き）
-    const trains = [
-      { id:301, name:"A301", direction:"down",
-        times: {"松江温泉":"17:26","ガーデン前":"17:27","朝日ヶ丘":"17:29","長江":"17:32","秋鹿町":"17:36","フォーゲル":"17:41","高ノ宮":"17:42","津ノ森":"17:44","伊野灘":"17:47","一畑口":"17:51","園":"17:56","湖遊館新駅":"17:57","布崎":"17:59","雲州平田":"18:02","旅伏":"18:06","美談":"18:11","大寺":"18:12","川跡":"18:14","武志":"18:17","大津町":"18:21","科学館前":"18:26","電鉄出雲市":"18:27"} },
-      { id:1, name:"A1", direction:"down",
-        times: {"川跡":"17:00","高浜":"17:02","遥堪":"17:06","浜山公園北口":"17:08","出雲大社前":"17:12"} },
-      { id:300, name:"A300", direction:"up",
-        times: {"電鉄出雲市":"17:56","科学館前":"17:54","大津町":"17:52","武志":"17:50","川跡":"17:48","大寺":"17:46","美談":"17:45","旅伏":"17:40","雲州平田":"17:36","布崎":"17:33","湖遊館新駅":"17:31","園":"17:30","一畑口":"17:25","伊野灘":"17:21","津ノ森":"17:18","高ノ宮":"17:16","フォーゲル":"17:15","秋鹿町":"17:10","長江":"17:06","朝日ヶ丘":"17:03","ガーデン前":"17:01","松江温泉":"17:00"} },
-      { id:2, name:"A2", direction:"up",
-        times: {"出雲大社前":"17:09","浜山公園北口":"17:07","遥堪":"17:05","高浜":"17:02","川跡":"17:00"} }
-    ];
-
-    // 駅座標取得
-    function getStationPos(st) {
-      let idx = mainLineStations.indexOf(st);
-      if (idx >= 0) return {x: startX + idx * stationGap, y: startY};
-      idx = branchLineStations.indexOf(st);
-      if (idx >= 0) return {x: kawatoX, y: kawatoY + idx * branchGap};
-      return null;
+// CSV読み込み
+let trains = [];
+fetch("trains.csv").then(r=>r.text()).then(text=>{
+  let rows = text.trim().split("\n").map(r=>r.split("\t"));
+  let headers = rows[0];
+  for (let i=1; i<rows.length; i++) {
+    let row = rows[i];
+    let train = {id:row[0], name:row[1], direction:row[2], times:{}};
+    for (let j=3; j<headers.length; j++) {
+      if (row[j]) train.times[headers[j]] = row[j];
     }
+    let color = getTrainColor(train.name);
+    let g = document.createElementNS("http://www.w3.org/2000/svg","g");
+    let poly = document.createElementNS("http://www.w3.org/2000/svg","polygon");
+    poly.setAttribute("class","train");
+    poly.setAttribute("fill",color.fill);
+    poly.setAttribute("stroke","black");
+    let label = document.createElementNS("http://www.w3.org/2000/svg","text");
+    label.setAttribute("font-size","10");
+    label.setAttribute("fill",color.text);
+    label.setAttribute("text-anchor","middle");
+    g.appendChild(poly);
+    g.appendChild(label);
+    svg.appendChild(g);
+    train.element = poly;
+    train.label = label;
+    trains.push(train);
+  }
+});
 
-    // 時刻を秒に変換
-    function toSeconds(t) {
-      let [h,m] = t.split(":").map(Number);
-      return h*3600 + m*60;
+// 時刻を秒に
+function toSeconds(t) {
+  let parts = t.split(":").map(Number);
+  if (parts.length===2) return parts[0]*3600+parts[1]*60;
+  if (parts.length===3) return parts[0]*3600+parts[1]*60+parts[2];
+  if (/^\d{4}$/.test(t)) return parseInt(t.slice(0,2))*3600 + parseInt(t.slice(2))*60;
+  return 0;
+}
+
+// 更新処理
+function update() {
+  let now = new Date();
+  document.getElementById("clock").textContent =
+    now.toLocaleTimeString("ja-JP",{hour12:false});
+  let nowSec = now.getHours()*3600 + now.getMinutes()*60 + now.getSeconds();
+
+  trains.forEach(tr=>{
+    let stops = Object.entries(tr.times).map(([st,t])=>[st,toSeconds(t)]);
+    for (let i=0; i<stops.length-1; i++) {
+      let [st1,t1] = stops[i], [st2,t2] = stops[i+1];
+      if (nowSec>=t1 && nowSec<=t2) {
+        let p1 = stationPos[st1], p2 = stationPos[st2];
+        if (!p1||!p2) continue;
+        let ratio = (nowSec-t1)/(t2-t1);
+        let x = p1.x+(p2.x-p1.x)*ratio;
+        let y = p1.y+(p2.y-p1.y)*ratio;
+        let angle = Math.atan2(p2.y-p1.y,p2.x-p1.x)*180/Math.PI;
+        let textW = tr.name.length*7;
+        let h=14, w=textW+12;
+        tr.element.setAttribute("points",
+          `${x-w/2},${y-h/2} ${x+w/2},${y-h/2} ${x+w/2+8},${y} ${x+w/2},${y+h/2} ${x-w/2},${y+h/2}`);
+        tr.element.setAttribute("transform",`rotate(${angle},${x},${y})`);
+        tr.label.setAttribute("x",x);
+        tr.label.setAttribute("y",y+4);
+        tr.label.textContent=tr.name;
+        return;
+      }
     }
-
-    // 列車アイコン
-    trains.forEach(tr => {
-      let el = document.createElementNS("http://www.w3.org/2000/svg","polygon");
-      el.setAttribute("class","train");
-      svg.appendChild(el);
-      tr.element = el;
-    });
-
-    // 時計 & 列車更新
-    function update() {
-      let now = new Date();
-      document.getElementById("clock").textContent =
-        now.toLocaleTimeString("ja-JP",{hour12:false});
-
-      let nowSec = now.getHours()*3600 + now.getMinutes()*60 + now.getSeconds();
-
-      trains.forEach(tr => {
-        let stops = Object.entries(tr.times).map(([st,t])=>[st,toSeconds(t)]);
-        for (let i=0; i<stops.length-1; i++) {
-          let [st1,t1] = stops[i], [st2,t2] = stops[i+1];
-          if (nowSec >= t1 && nowSec <= t2) {
-            let p1 = getStationPos(st1), p2 = getStationPos(st2);
-            let ratio = (nowSec-t1)/(t2-t1);
-            let x = p1.x + (p2.x-p1.x)*ratio;
-            let y = p1.y + (p2.y-p1.y)*ratio;
-            // 進行方向の角度
-            let angle = Math.atan2(p2.y-p1.y,p2.x-p1.x)*180/Math.PI;
-            tr.element.setAttribute("points",
-              `${x},${y-6} ${x+10},${y} ${x},${y+6}`);
-            tr.element.setAttribute("transform",`rotate(${angle},${x},${y})`);
-            return;
-          }
-        }
-        tr.element.setAttribute("points","");
-      });
-    }
-
-    setInterval(update,1000);
-    update();
-  </script>
+    tr.element.setAttribute("points","");
+    tr.label.textContent="";
+  });
+}
+setInterval(update,1000);
+</script>
 </body>
 </html>
