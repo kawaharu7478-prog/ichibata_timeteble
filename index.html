@@ -26,7 +26,8 @@
       "一畑口","園","湖遊館新駅","布崎","雲州平田","旅伏","美談","大寺","川跡",
       "武志","大津町","科学館前","電鉄出雲市"
     ];
-    const branchStations = ["川跡","高浜","遥堪","浜山公園北口","出雲大社前"];
+    // 川跡(支線)に改名して重複を避ける
+    const branchStations = ["川跡(支線)","高浜","遥堪","浜山公園北口","出雲大社前"];
 
     const stationSpacing = 40;  // 駅間隔
 
@@ -37,7 +38,7 @@
     const branchCoords = branchStations.map((d,i)=>({
       name:d,
       x: kawatoMain.x + (i*stationSpacing),
-      y: i===0 ? kawatoMain.y+stationSpacing : kawatoMain.y+stationSpacing+50
+      y: kawatoMain.y+stationSpacing+ (i===0?0:50)
     }));
     branchCoords[0].x = kawatoMain.x;
 
@@ -101,7 +102,12 @@
         const schedule = {};
         Object.keys(row).forEach(k=>{
           if (k!=="train_id" && k!=="train_name" && k!=="direction") {
-            schedule[k] = parseTime(row[k]);
+            let stationName = k;
+            // CSVの支線の「川跡」は branch の川跡に対応させる
+            if (stationName==="川跡" && row["高浜"]!==undefined) {
+              stationName="川跡(支線)";
+            }
+            schedule[stationName] = parseTime(row[k]);
           }
         });
         return {
@@ -120,7 +126,12 @@
         .attr("transform","translate(-100,-100)");
 
       trainElems.append("polygon")
-        .attr("points","-15,-10 15,0 -15,10")
+        .attr("points",d=>{
+          const w = 20 + d.name.length*6;
+          return d.dir==="up"
+            ? `-${w/2},-10 ${w/2},-10 ${w/2+5},0 ${w/2},10 -${w/2},10`
+            : `-${w/2},-10 ${w/2},-10 ${w/2},10 -${w/2},10 -${w/2-5},0`;
+        })
         .attr("stroke","black")
         .attr("stroke-width",1)
         .attr("fill",d=>getTrainStyle(d.name).fill);
@@ -151,18 +162,12 @@
             if (nowM>=t1 && nowM<=t2){
               const p=(nowM-t1)/(t2-t1);
               const c1=coords[s1],c2=coords[s2];
-              let x=c1.x+(c2.x-c1.x)*p;
-              let y=c1.y+(c2.y-c1.y)*p;
-
-              // === 修正ポイント ===
-              if (train.dir==="up") {
-                y -= 15; // 上にずらす
-              } else if (train.dir==="down") {
-                y += 15; // 下にずらす
+              if (c1 && c2){
+                const x=c1.x+(c2.x-c1.x)*p;
+                const y=c1.y+(c2.y-c1.y)*p + (train.dir==="up" ? -15 : 15); // upは上側, downは下側
+                pos={x,y};
+                angle=Math.atan2(c2.y-c1.y,c2.x-c1.x)*180/Math.PI;
               }
-
-              pos={x,y};
-              angle=Math.atan2(c2.y-c1.y,c2.x-c1.x)*180/Math.PI;
               break;
             }
           }
