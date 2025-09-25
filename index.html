@@ -6,7 +6,7 @@
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <style>
     body { font-family: sans-serif; }
-    .station-line { stroke: black; stroke-width: 2; }
+    .station-line { stroke: black; stroke-width: 2; fill: none; }
     .station-circle { fill: white; stroke: black; stroke-width: 2; }
     .station-label { font-size: 12px; text-anchor: middle; }
     .train-label { font-size: 12px; fill: white; pointer-events: none; }
@@ -14,74 +14,111 @@
 </head>
 <body>
   <h2>路線図</h2>
-  <svg id="map" width="800" height="600"></svg>
+  <svg id="map" width="900" height="600"></svg>
   <div>現在時刻: <span id="current-time"></span></div>
 
   <script>
-    const stations = [
-      { name: "川跡(本線)", x: 100, y: 100 },
-      { name: "松江しんじ湖温泉", x: 700, y: 100 },
-      { name: "川跡(支線)", x: 100, y: 200 },
-      { name: "出雲大社前", x: 700, y: 200 }
-    ];
-
     const svg = d3.select("#map");
 
-    // 路線
-    svg.append("line")
-      .attr("x1", stations[0].x).attr("y1", stations[0].y)
-      .attr("x2", stations[1].x).attr("y2", stations[1].y)
-      .attr("class", "station-line");
+    // CSV 読み込み
+    Promise.all([
+      d3.csv("stations.csv"), // 駅座標: name,x,y,order
+      d3.csv("trains.csv")    // 列車運行: train_id,train_name,direction,駅ごとのhhmm
+    ]).then(([stations, trains]) => {
+      stations.forEach(d => {
+        d.x = +d.x;
+        d.y = +d.y;
+      });
 
-    svg.append("line")
-      .attr("x1", stations[2].x).attr("y1", stations[2].y)
-      .attr("x2", stations[3].x).attr("y2", stations[3].y)
-      .attr("class", "station-line");
+      // 路線描画
+      svg.append("path")
+        .datum(stations.sort((a,b)=>+a.order - +b.order))
+        .attr("d", d3.line()
+          .x(d => d.x)
+          .y(d => d.y))
+        .attr("class", "station-line");
 
-    // 駅
-    stations.forEach(s => {
-      svg.append("circle")
-        .attr("cx", s.x).attr("cy", s.y)
-        .attr("r", 6).attr("class", "station-circle");
+      // 駅描画
+      stations.forEach(s => {
+        svg.append("circle")
+          .attr("cx", s.x).attr("cy", s.y)
+          .attr("r", 6).attr("class", "station-circle");
 
-      svg.append("text")
-        .attr("x", s.x).attr("y", s.y - 10)
-        .attr("class", "station-label")
-        .text(s.name);
-    });
+        svg.append("text")
+          .attr("x", s.x).attr("y", s.y - 10)
+          .attr("class", "station-label")
+          .text(s.name);
+      });
 
-    // 列車アイコン（サンプル1本）
-    function drawTrain(x, y, name, direction = "right") {
-      const group = svg.append("g");
-
-      const textLength = name.length * 12; // 長方形の横幅を文字数に合わせる
-      const height = 20;
-
-      group.append("rect")
-        .attr("x", x).attr("y", y - height / 2)
-        .attr("width", textLength).attr("height", height)
-        .attr("fill", "blue");
-
-      if (direction === "right") {
-        group.append("polygon")
-          .attr("points", `${x + textLength},${y - height / 2} ${x + textLength + 10},${y} ${x + textLength},${y + height / 2}`)
-          .attr("fill", "blue");
-      } else {
-        group.append("polygon")
-          .attr("points", `${x},${y - height / 2} ${x - 10},${y} ${x},${y + height / 2}`)
-          .attr("fill", "blue");
+      // hhmm → 分に変換
+      function hhmmToMinutes(t) {
+        if (!t) return null;
+        const hh = Math.floor(+t / 100);
+        const mm = +t % 100;
+        return hh * 60 + mm;
       }
 
-      group.append("text")
-        .attr("x", x + textLength / 2)
-        .attr("y", y + 4)
-        .attr("text-anchor", "middle")
-        .attr("class", "train-label")
-        .text(name);
-    }
+      // 列車描画関数
+      function drawTrains() {
+        svg.selectAll(".train").remove();
 
-    drawTrain(300, 100, "快速 出雲市行", "right");
-    drawTrain(500, 200, "普通 出雲大社前", "left");
+        const now = new Date();
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+        trains.forEach(t => {
+          const times = [];
+          stations.forEach(s => {
+            if (t[s.name]) {
+              times.push({station: s, time: hhmmToMinutes(t[s.name])});
+            }
+          });
+
+          // 区間を探す
+          for (let i = 0; i < times.length - 1; i++) {
+            const t1 = times[i], t2 = times[i+1];
+            if (t1.time && t2.time && t1.time <= currentMinutes && currentMinutes <= t2.time) {
+              const ratio = (currentMinutes - t1.time) / (t2.time - t1.time);
+              const x = t1.station.x + (t2.station.x - t1.station.x) * ratio;
+              const y = t1.station.y + (t2.station.y - t1.station.y) * ratio;
+
+              const name = t.train_name;
+              const dir = t.direction;
+              const g = svg.append("g").attr("class", "train");
+
+              const textLength = name.length * 12;
+              const height = 20;
+
+              g.append("rect")
+                .attr("x", x).attr("y", y - height / 2)
+                .attr("width", textLength).attr("height", height)
+                .attr("fill", "blue");
+
+              if (dir === "down") {
+                g.append("polygon")
+                  .attr("points", `${x+textLength},${y-height/2} ${x+textLength+10},${y} ${x+textLength},${y+height/2}`)
+                  .attr("fill", "blue");
+              } else {
+                g.append("polygon")
+                  .attr("points", `${x},${y-height/2} ${x-10},${y} ${x},${y+height/2}`)
+                  .attr("fill", "blue");
+              }
+
+              g.append("text")
+                .attr("x", x + textLength/2)
+                .attr("y", y + 4)
+                .attr("text-anchor", "middle")
+                .attr("class", "train-label")
+                .text(name);
+
+              break;
+            }
+          }
+        });
+      }
+
+      drawTrains();
+      setInterval(drawTrains, 30000); // 30秒ごと更新
+    });
 
     // 時刻表示
     function updateTime() {
