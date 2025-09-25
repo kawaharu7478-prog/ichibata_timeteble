@@ -17,7 +17,7 @@
     const width = +svg.attr("width");
     const height = +svg.attr("height");
 
-    // 駅データ（本線と支線）
+    // 駅データ
     const honStations = ["松江温泉","ガーデン前","朝日ヶ丘","長江","秋鹿町","フォーゲル","高ノ宮","津ノ森","伊野灘","一畑口","園","湖遊館新駅","布崎","雲州平田","旅伏","美談","大寺","川跡","武志","大津町","科学館前","電鉄出雲市"];
     const shiStations = ["川跡","高浜","遥堪","浜山公園北口","出雲大社前"];
 
@@ -100,13 +100,12 @@
         const g = d3.select(this);
         const style = getTrainStyle(train.name);
 
-        // 幅を文字数に応じて調整
+        // === ここだけ修正：長方形＋進行方向にとがり ===
         const textLen = train.name.length;
-        const w = 14 + textLen * 8; // 基本幅 + 文字ごとの幅
+        const w = 14 + textLen * 8;
         const h = 16;
-        const arrow = 6; // とがりの長さ
+        const arrow = 6;
 
-        // 多角形（進行方向によって矢印の向き変更）
         let points;
         if (train.direction === "down") {
           points = `0,0 ${w},0 ${w+arrow},${h/2} ${w},${h} 0,${h}`;
