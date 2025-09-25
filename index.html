@@ -1,160 +1,149 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<title>列車位置表示</title>
-<style>
-  body { font-family: sans-serif; }
-  #clock { font-size: 20px; margin-bottom: 10px; }
-  svg { border: 1px solid #ccc; background: #f9f9f9; }
-  .station { font-size: 12px; text-anchor: middle; }
-  .line { stroke: black; stroke-width: 2; }
-  .train { stroke: black; stroke-width: 1; }
-</style>
+  <meta charset="UTF-8">
+  <title>一畑電車 運行表示</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    body { font-family: sans-serif; }
+    .station { font-size: 12px; text-anchor: middle; }
+    .line { stroke: black; stroke-width: 2; fill: none; }
+    .train { fill: orange; stroke: black; stroke-width: 1; }
+    .time-label { font-size: 20px; font-weight: bold; text-anchor: middle; }
+  </style>
 </head>
 <body>
-<div id="clock"></div>
-<svg id="map" width="1600" height="400"></svg>
-<script>
-// 本線と支線の駅リスト
-const mainStations = ["松江温泉","ガーデン前","朝日ヶ丘","長江","秋鹿町","フォーゲル","高ノ宮","津ノ森","伊野灘","一畑口","園","湖遊館新駅","布崎","雲州平田","旅伏","美談","大寺","川跡","武志","大津町","科学館前","電鉄出雲市"];
-const branchStations = ["川跡","高浜","遥堪","浜山公園北口","出雲大社前"];
+  <svg id="map" width="1200" height="800"></svg>
 
-const svg = document.getElementById("map");
-const stationPos = {};
+  <script>
+    const svg = d3.select("#map");
+    const width = +svg.attr("width");
+    const height = +svg.attr("height");
 
-// 駅間隔
-const spacing = 70;
-const startX = 100;
-const baseY = 150;
+    // 本線と支線の駅
+    const mainStations = [
+      "松江温泉","ガーデン前","朝日ヶ丘","長江","秋鹿町","フォーゲル","高ノ宮","津ノ森","伊野灘",
+      "一畑口","園","湖遊館新駅","布崎","雲州平田","旅伏","美談","大寺","川跡",
+      "武志","大津町","科学館前","電鉄出雲市"
+    ];
+    const branchStations = ["川跡","高浜","遥堪","浜山公園北口","出雲大社前"];
 
-// 本線描画
-for (let i=0; i<mainStations.length; i++) {
-  let x = startX + i*spacing;
-  let y = baseY;
-  stationPos[mainStations[i]] = {x,y};
-  svg.innerHTML += `<circle cx="${x}" cy="${y}" r="4" fill="black"/>`;
-  svg.innerHTML += `<text x="${x}" y="${y-10}" class="station">${mainStations[i]}</text>`;
-  if (i>0) {
-    let px = startX + (i-1)*spacing;
-    svg.innerHTML += `<line x1="${px}" y1="${y}" x2="${x}" y2="${y}" class="line"/>`;
-  }
-}
+    const stationSpacing = 40;  // 駅間隔を少し広めに
 
-// 支線描画（本線の川跡駅の真下から並行）
-let kawatoMain = stationPos["川跡"];
-let branchStartY = kawatoMain.y + 70;
-for (let i=0; i<branchStations.length; i++) {
-  let x = kawatoMain.x + i*spacing;
-  let y = branchStartY;
-  stationPos[branchStations[i]] = {x,y};
-  svg.innerHTML += `<circle cx="${x}" cy="${y}" r="4" fill="black"/>`;
-  svg.innerHTML += `<text x="${x}" y="${y+20}" class="station">${branchStations[i]}</text>`;
-  if (i==0) {
-    svg.innerHTML += `<line x1="${kawatoMain.x}" y1="${kawatoMain.y}" x2="${x}" y2="${y}" class="line"/>`;
-  } else {
-    let px = kawatoMain.x + (i-1)*spacing;
-    svg.innerHTML += `<line x1="${px}" y1="${y}" x2="${x}" y2="${y}" class="line"/>`;
-  }
-}
+    // 本線座標
+    const mainCoords = mainStations.map((d,i)=>({name:d,x:100+i*stationSpacing,y:200}));
+    // 支線（川跡から下に降りて平行に）
+    const kawatoMain = mainCoords.find(s=>s.name==="川跡");
+    const branchCoords = branchStations.map((d,i)=>({
+      name:d,
+      x: kawatoMain.x + (i*stationSpacing),
+      y: i===0 ? kawatoMain.y+stationSpacing : kawatoMain.y+stationSpacing+50
+    }));
+    branchCoords[0].x = kawatoMain.x; // 川跡の位置を本線直下に
 
-// 列車色設定
-function getTrainColor(name) {
-  if (name.includes("A")) return {fill:"red",text:"white"};
-  if (name.includes("B")) return {fill:"green",text:"white"};
-  if (name.includes("C")) return {fill:"yellow",text:"black"};
-  if (name.includes("D")) return {fill:"blue",text:"black"};
-  if (name.includes("E")) return {fill:"none",text:"black"};
-  if (name.includes("F")) return {fill:"cyan",text:"black"};
-  if (name.includes("G")) return {fill:"orange",text:"white"};
-  if (name.includes("H")) return {fill:"pink",text:"black"};
-  if (name.includes("I")) return {fill:"lime",text:"black"};
-  return {fill:"white",text:"black"};
-}
+    // 線を描画
+    svg.append("polyline")
+      .attr("points", mainCoords.map(d=>`${d.x},${d.y}`).join(" "))
+      .attr("class","line");
+    svg.append("polyline")
+      .attr("points", branchCoords.map(d=>`${d.x},${d.y}`).join(" "))
+      .attr("class","line");
 
-// CSV読み込み
-let trains = [];
-fetch("trains.csv").then(r=>r.text()).then(text=>{
-  let rows = text.trim().split("\n").map(r=>r.split("\t"));
-  let headers = rows[0];
-  for (let i=1; i<rows.length; i++) {
-    let row = rows[i];
-    let train = {id:row[0], name:row[1], direction:row[2], times:{}};
-    for (let j=3; j<headers.length; j++) {
-      if (row[j]) train.times[headers[j]] = row[j];
+    // 駅を描画
+    svg.selectAll(".station.main")
+      .data(mainCoords).enter().append("circle")
+      .attr("cx",d=>d.x).attr("cy",d=>d.y).attr("r",5).attr("fill","black");
+    svg.selectAll(".station.branch")
+      .data(branchCoords).enter().append("circle")
+      .attr("cx",d=>d.x).attr("cy",d=>d.y).attr("r",5).attr("fill","black");
+
+    // 駅名ラベル
+    svg.selectAll(".station-label.main")
+      .data(mainCoords).enter().append("text")
+      .attr("x",d=>d.x).attr("y",d=>d.y-10)
+      .text(d=>d.name).attr("class","station");
+    svg.selectAll(".station-label.branch")
+      .data(branchCoords).enter().append("text")
+      .attr("x",d=>d.x).attr("y",d=>d.y+20)
+      .text(d=>d.name).attr("class","station");
+
+    // 時刻を分に変換 (hhmm → 分)
+    function parseTime(val) {
+      if (!val || isNaN(val)) return null;
+      const num = parseInt(val);
+      const hh = Math.floor(num/100);
+      const mm = num % 100;
+      return hh*60+mm;
     }
-    let color = getTrainColor(train.name);
-    let g = document.createElementNS("http://www.w3.org/2000/svg","g");
-    let poly = document.createElementNS("http://www.w3.org/2000/svg","polygon");
-    poly.setAttribute("class","train");
-    poly.setAttribute("fill",color.fill);
-    poly.setAttribute("stroke","black");
-    let label = document.createElementNS("http://www.w3.org/2000/svg","text");
-    label.setAttribute("font-size","10");
-    label.setAttribute("fill",color.text);
-    label.setAttribute("text-anchor","middle");
-    g.appendChild(poly);
-    g.appendChild(label);
-    svg.appendChild(g);
-    train.element = poly;
-    train.label = label;
-    trains.push(train);
-  }
-});
 
-// 時刻を秒に変換（hhmm形式対応）
-function toSeconds(t) {
-  if (!t) return null;
-  t = t.trim();
-  if (/^\d{4}$/.test(t)) { // hhmm形式
-    let h = parseInt(t.slice(0,2),10);
-    let m = parseInt(t.slice(2),10);
-    return h*3600 + m*60;
-  }
-  if (/^\d{2}:\d{2}$/.test(t)) { // hh:mm形式
-    let [h,m] = t.split(":").map(Number);
-    return h*3600 + m*60;
-  }
-  return null;
-}
+    // 現在時刻をラベル表示
+    const timeLabel = svg.append("text")
+      .attr("x",width/2).attr("y",50)
+      .attr("class","time-label");
 
-// 更新処理
-function update() {
-  let now = new Date();
-  document.getElementById("clock").textContent =
-    now.toLocaleTimeString("ja-JP",{hour12:false});
-  let nowSec = now.getHours()*3600 + now.getMinutes()*60 + now.getSeconds();
+    // 列車読み込み
+    d3.csv("trains.csv").then(data=>{
+      const trains = data.map(row=>{
+        const schedule = {};
+        Object.keys(row).forEach(k=>{
+          if (k!=="train_id" && k!=="train_name" && k!=="direction") {
+            schedule[k] = parseTime(row[k]);
+          }
+        });
+        return {
+          id: row.train_id,
+          name: row.train_name,
+          dir: row.direction,
+          schedule: schedule
+        };
+      });
 
-  trains.forEach(tr=>{
-    let stops = Object.entries(tr.times)
-      .map(([st,t])=>[st,toSeconds(t)])
-      .filter(([st,sec])=>sec!==null);
-    for (let i=0; i<stops.length-1; i++) {
-      let [st1,t1] = stops[i], [st2,t2] = stops[i+1];
-      if (nowSec>=t1 && nowSec<=t2) {
-        let p1 = stationPos[st1], p2 = stationPos[st2];
-        if (!p1||!p2) continue;
-        let ratio = (nowSec-t1)/(t2-t1);
-        let x = p1.x+(p2.x-p1.x)*ratio;
-        let y = p1.y+(p2.y-p1.y)*ratio;
-        let angle = Math.atan2(p2.y-p1.y,p2.x-p1.x)*180/Math.PI;
-        let textW = tr.name.length*7;
-        let h=14, w=textW+12;
-        tr.element.setAttribute("points",
-          `${x-w/2},${y-h/2} ${x+w/2},${y-h/2} ${x+w/2+8},${y} ${x+w/2},${y+h/2} ${x-w/2},${y+h/2}`);
-        tr.element.setAttribute("transform",`rotate(${angle},${x},${y})`);
-        tr.label.setAttribute("x",x);
-        tr.label.setAttribute("y",y+4);
-        tr.label.textContent=tr.name;
-        return;
-      }
-    }
-    // 表示対象外のとき非表示
-    tr.element.setAttribute("points","");
-    tr.label.textContent="";
-  });
-}
-setInterval(update,1000);
-</script>
+      // 列車アイコン
+      const trainElems = svg.selectAll(".train")
+        .data(trains).enter()
+        .append("polygon")
+        .attr("class","train")
+        .attr("points","-15,-10 15,0 -15,10")
+        .attr("transform","translate(-100,-100)");
+
+      // 座標表をまとめる
+      const coords = {};
+      [...mainCoords,...branchCoords].forEach(d=>coords[d.name]=d);
+
+      // 更新ループ
+      setInterval(()=>{
+        const now = new Date();
+        const nowM = now.getHours()*60+now.getMinutes()+now.getSeconds()/60;
+        timeLabel.text(d3.timeFormat("%H:%M:%S")(now));
+
+        trains.forEach((train,i)=>{
+          const stops = Object.entries(train.schedule).filter(([st,t])=>t!=null);
+          stops.sort((a,b)=>a[1]-b[1]);
+
+          let pos=null,angle=0;
+          for (let j=0;j<stops.length-1;j++){
+            const [s1,t1]=stops[j];
+            const [s2,t2]=stops[j+1];
+            if (nowM>=t1 && nowM<=t2){
+              const p=(nowM-t1)/(t2-t1);
+              const c1=coords[s1],c2=coords[s2];
+              const x=c1.x+(c2.x-c1.x)*p;
+              const y=c1.y+(c2.y-c1.y)*p;
+              pos={x,y};
+              angle=Math.atan2(c2.y-c1.y,c2.x-c1.x)*180/Math.PI;
+              break;
+            }
+          }
+          if (pos){
+            trainElems.filter((d,idx)=>idx===i)
+              .attr("transform",`translate(${pos.x},${pos.y}) rotate(${angle})`);
+          } else {
+            trainElems.filter((d,idx)=>idx===i)
+              .attr("transform","translate(-100,-100)");
+          }
+        });
+      },1000);
+    });
+  </script>
 </body>
 </html>
