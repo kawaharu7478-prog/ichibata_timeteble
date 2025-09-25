@@ -102,13 +102,20 @@ fetch("trains.csv").then(r=>r.text()).then(text=>{
   }
 });
 
-// 時刻を秒に
+// 時刻を秒に変換（hhmm形式対応）
 function toSeconds(t) {
-  let parts = t.split(":").map(Number);
-  if (parts.length===2) return parts[0]*3600+parts[1]*60;
-  if (parts.length===3) return parts[0]*3600+parts[1]*60+parts[2];
-  if (/^\d{4}$/.test(t)) return parseInt(t.slice(0,2))*3600 + parseInt(t.slice(2))*60;
-  return 0;
+  if (!t) return null;
+  t = t.trim();
+  if (/^\d{4}$/.test(t)) { // hhmm形式
+    let h = parseInt(t.slice(0,2),10);
+    let m = parseInt(t.slice(2),10);
+    return h*3600 + m*60;
+  }
+  if (/^\d{2}:\d{2}$/.test(t)) { // hh:mm形式
+    let [h,m] = t.split(":").map(Number);
+    return h*3600 + m*60;
+  }
+  return null;
 }
 
 // 更新処理
@@ -119,7 +126,9 @@ function update() {
   let nowSec = now.getHours()*3600 + now.getMinutes()*60 + now.getSeconds();
 
   trains.forEach(tr=>{
-    let stops = Object.entries(tr.times).map(([st,t])=>[st,toSeconds(t)]);
+    let stops = Object.entries(tr.times)
+      .map(([st,t])=>[st,toSeconds(t)])
+      .filter(([st,sec])=>sec!==null);
     for (let i=0; i<stops.length-1; i++) {
       let [st1,t1] = stops[i], [st2,t2] = stops[i+1];
       if (nowSec>=t1 && nowSec<=t2) {
@@ -140,6 +149,7 @@ function update() {
         return;
       }
     }
+    // 表示対象外のとき非表示
     tr.element.setAttribute("points","");
     tr.label.textContent="";
   });
