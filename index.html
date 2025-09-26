@@ -28,7 +28,7 @@
     ];
     const branchStations = ["川跡","高浜","遥堪","浜山公園北口","出雲大社前"];
 
-    const stationSpacing = 60;  // 駅間隔を少し広げた
+    const stationSpacing = 100;  // 駅間隔を少し広げた
 
     // 本線座標
     const mainCoords = mainStations.map((d,i)=>({name:d,x:100+i*stationSpacing,y:200}));
@@ -136,7 +136,7 @@
             return `-${w/2},-${h/2} ${w/2-5},-${h/2} ${w/2},0 ${w/2-5},${h/2} -${w/2},${h/2}`;
           } else {
             // 左向き矢印
-            return `${w/2},-${h/2} -${w/2+5},-${h/2} -${w/2},0 -${w/2+5},${h/2} ${w/2},${h/2}`;
+            return `-${w/2},-${h/2} ${w/2+5},-${h/2} ${w/2},0 ${w/2+5},${h/2} -${w/2},${h/2}`;
           }
         })
         .attr("fill",d=>getTrainStyle(d.name).fill)
@@ -182,3 +182,4 @@
   </script>
 </body>
 </html>
+
