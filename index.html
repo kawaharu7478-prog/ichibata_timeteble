@@ -13,7 +13,7 @@
   </style>
 </head>
 <body>
-  <svg id="map" width="1200" height="800"></svg>
+  <svg id="map" width="1400" height="800"></svg>
 
   <script>
     const svg = d3.select("#map");
@@ -28,7 +28,7 @@
     ];
     const branchStations = ["川跡","高浜","遥堪","浜山公園北口","出雲大社前"];
 
-    const stationSpacing = 40;  // 駅間隔
+    const stationSpacing = 60;  // 駅間隔を少し広げた
 
     // 本線座標
     const mainCoords = mainStations.map((d,i)=>({name:d,x:100+i*stationSpacing,y:200}));
@@ -37,9 +37,10 @@
     const branchCoords = branchStations.map((d,i)=>({
       name:d,
       x: kawatoMain.x + (i*stationSpacing),
-      y: i===0 ? kawatoMain.y+stationSpacing : kawatoMain.y+stationSpacing+50
+      y: kawatoMain.y+stationSpacing+50
     }));
     branchCoords[0].x = kawatoMain.x;
+    branchCoords[0].y = branchCoords[1].y; // 川跡を高浜と同じ高さに
 
     // 線を描画
     svg.append("polyline")
@@ -125,13 +126,19 @@
         .text(d=>d.name)
         .attr("fill",d=>getTrainStyle(d.name).text);
 
-      // 枠 (テキストに合わせる)
-      trainElems.insert("rect","text")
-        .attr("x",d=>-labels.nodes()[trains.indexOf(d)].getBBox().width/2-4)
-        .attr("y",-8)
-        .attr("width",d=>labels.nodes()[trains.indexOf(d)].getBBox().width+8)
-        .attr("height",16)
-        .attr("rx",2).attr("ry",2)
+      // 枠 (矢印型ポリゴン)
+      trainElems.insert("polygon","text")
+        .attr("points",(d,i)=>{
+          const w = labels.nodes()[i].getBBox().width + 16;
+          const h = 16;
+          if (d.dir==="up") {
+            // 右向き矢印
+            return `-${w/2},-${h/2} ${w/2-5},-${h/2} ${w/2},0 ${w/2-5},${h/2} -${w/2},${h/2}`;
+          } else {
+            // 左向き矢印
+            return `${w/2},-${h/2} -${w/2+5},-${h/2} -${w/2},0 -${w/2+5},${h/2} ${w/2},${h/2}`;
+          }
+        })
         .attr("fill",d=>getTrainStyle(d.name).fill)
         .attr("stroke","black");
 
@@ -157,7 +164,7 @@
               const p=(nowM-t1)/(t2-t1);
               const c1=coords[s1],c2=coords[s2];
               const x=c1.x+(c2.x-c1.x)*p;
-              const y=c1.y+(c2.y-c1.y)*p + (train.dir==="up" ? -15 : 15); // 上下分離
+              const y=c1.y+(c2.y-c1.y)*p + (train.dir==="up" ? -30 : 30); // 上下間隔を±30
               pos={x,y};
               break;
             }
