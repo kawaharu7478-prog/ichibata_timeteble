@@ -9,7 +9,8 @@
     .station { fill: black; }
     .station-label { font-size: 10px; text-anchor: middle; }
     .train { fill: red; stroke: black; stroke-width: 1px; }
-    /* 修正点①: 横スクロール可能にする */
+
+    /* 修正点①: 横スクロール対応 */
     #map-container {
       width: 100%;
       overflow-x: auto;
@@ -19,9 +20,11 @@
 </head>
 <body>
   <h2>列車運行可視化</h2>
+  <!-- 修正点②: SVGをラップ -->
   <div id="map-container">
     <svg id="map" height="400"></svg>
   </div>
+
   <script>
     const stationsMain = [
       "松江温泉","ガーデン前","朝日ヶ丘","長江","秋鹿町","フォーゲル","高ノ宮","津ノ森","伊野灘",
@@ -46,8 +49,10 @@
       }
     });
 
-    // 修正点②: SVG幅を最後の駅の座標に合わせる
-    const maxX = d3.max(Object.values(stationPositions), d => d.x) + 100;
+    // 修正点③: SVGの横幅を自動計算
+    const maxX = Math.max(
+      ...Object.values(stationPositions).map(p => p.x)
+    ) + 100;
     const svg = d3.select("#map").attr("width", maxX);
 
     // 本線
@@ -90,8 +95,10 @@
       const pos = stationPositions[train.position];
       let points;
       if (train.direction === "up") {
+        // 右向き（三角）
         points = `${pos.x-10},${pos.y-10} ${pos.x+15},${pos.y} ${pos.x-10},${pos.y+10}`;
       } else {
+        // 左向き（三角）
         points = `${pos.x+10},${pos.y-10} ${pos.x-15},${pos.y} ${pos.x+10},${pos.y+10}`;
       }
       svg.append("polygon")
