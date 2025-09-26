@@ -10,14 +10,23 @@
     .line { stroke: black; stroke-width: 2; fill: none; }
     .time-label { font-size: 20px; font-weight: bold; text-anchor: middle; }
     .train text { font-size: 10px; font-weight: bold; text-anchor: middle; dominant-baseline: middle; }
+
+    /* 修正① 横スクロール対応 */
+    #map-container {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid #ccc;
+    }
   </style>
 </head>
 <body>
-  <svg id="map" width="1400" height="800"></svg>
+  <!-- 修正②: svgをラップ -->
+  <div id="map-container">
+    <svg id="map" height="800"></svg>
+  </div>
 
   <script>
     const svg = d3.select("#map");
-    const width = +svg.attr("width");
     const height = +svg.attr("height");
 
     // 本線と支線の駅
@@ -41,6 +50,12 @@
     }));
     branchCoords[0].x = kawatoMain.x;
     branchCoords[0].y = branchCoords[1].y; // 川跡を高浜と同じ高さに
+
+    // 修正③: SVGの幅を自動計算
+    const maxX = Math.max(
+      ...[...mainCoords, ...branchCoords].map(d => d.x)
+    ) + 200;
+    svg.attr("width", maxX);
 
     // 線を描画
     svg.append("polyline")
@@ -93,7 +108,7 @@
 
     // 現在時刻表示
     const timeLabel = svg.append("text")
-      .attr("x",width/2).attr("y",50)
+      .attr("x",maxX/2).attr("y",50)
       .attr("class","time-label");
 
     // 列車読み込み
@@ -132,11 +147,9 @@
           const w = labels.nodes()[i].getBBox().width + 16;
           const h = 16;
           if (d.dir==="up") {
-            // 右向き矢印
             return `-${w/2},-${h/2} ${w/2-5},-${h/2} ${w/2},0 ${w/2-5},${h/2} -${w/2},${h/2}`;
           } else {
-            // 左向き矢印
-            return `${w/2},-${h/2} -${w/2+5},-${h/2} -${w/2},0 -${w/2+5},${h/2} ${w/2},${h/2}`;
+            return `${w/2},-${h/2} -${w/2-5},-${h/2} -${w/2},0 -${w/2-5},${h/2} ${w/2},${h/2}`;
           }
         })
         .attr("fill",d=>getTrainStyle(d.name).fill)
@@ -164,7 +177,7 @@
               const p=(nowM-t1)/(t2-t1);
               const c1=coords[s1],c2=coords[s2];
               const x=c1.x+(c2.x-c1.x)*p;
-              const y=c1.y+(c2.y-c1.y)*p + (train.dir==="up" ? -30 : 30); // 上下間隔を±30
+              const y=c1.y+(c2.y-c1.y)*p + (train.dir==="up" ? -30 : 30);
               pos={x,y};
               break;
             }
