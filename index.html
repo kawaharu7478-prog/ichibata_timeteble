@@ -25,7 +25,7 @@
       border: 1px solid #ccc;
     }
 
-    /* 運用投稿フォームのスタイル */
+    /* 運用投稿フォーム・一覧ボタンのスタイル */
     #post-container {
       margin-bottom: 15px;
       padding: 10px;
@@ -36,6 +36,41 @@
       padding: 5px;
       margin-right: 10px;
       font-size: 14px;
+      cursor: pointer;
+    }
+
+    /* 【新設】運用一覧表示エリアのスタイル */
+    #unyo-list-modal {
+      display: none; /* 初期状態は非表示 */
+      margin-bottom: 15px;
+      padding: 15px;
+      background-color: #fffff0;
+      border: 1px solid #e6db55;
+      border-radius: 5px;
+      max-width: 400px;
+    }
+    #unyo-list-modal h3 {
+      margin-top: 0;
+      margin-bottom: 10px;
+      font-size: 16px;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 5px;
+    }
+    .unyo-list-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 6px;
+      font-size: 14px;
+      font-weight: bold;
+    }
+    .unyo-list-label {
+      width: 50px;
+    }
+    .unyo-list-img {
+      width: 20px;
+      height: 20px;
+      margin-right: 8px;
+      object-fit: contain;
     }
 
     /* 時刻管理コントロールのスタイル */
@@ -150,6 +185,12 @@
     </select>
 
     <button id="post-btn">運用投稿</button>
+    <button id="toggle-list-btn">運用一覧 表示/非表示</button>
+  </div>
+
+  <div id="unyo-list-modal">
+    <h3>現在の運用車両一覧</h3>
+    <div id="unyo-list-content"></div>
   </div>
 
   <div id="time-control-container">
@@ -172,6 +213,9 @@
   <script>
     const svg = d3.select("#map");
     const height = +svg.attr("height");
+
+    // 全運用リスト（一覧描画用）
+    const unyoListKeys = ["A", "B", "C", "D出", "D中", "D畑", "E", "F", "G", "H", "I"];
 
     // 駅定義・座標計算
     const mainStations = [
@@ -203,7 +247,6 @@
     function loadUnyoData() { const savedDate = localStorage.getItem("unyo_date"); const today = getTodayString(); if (savedDate !== today) { localStorage.setItem("unyo_date", today); localStorage.setItem("unyo_assignments", JSON.stringify({})); return {}; } const assignments = localStorage.getItem("unyo_assignments"); return assignments ? JSON.parse(assignments) : {}; }
     let currentAssignments = loadUnyoData();
 
-    // 【修正】formation1, 2, 3 すべて運用記号（A, Gなど）として共通ロジックで処理する
     function getFormationInfo(train, formationNum, assignments) {
       let unyoKey = "";
       if (formationNum === 1) unyoKey = train.formation1;
@@ -211,16 +254,30 @@
       else if (formationNum === 3) unyoKey = train.formation3;
 
       unyoKey = unyoKey ? unyoKey.trim() : "";
-      if (!unyoKey) return null; // そもそもCSVが空欄なら何も表示しない
+      if (!unyoKey) return null;
 
-      // 投稿データから車両画像名を決定（投稿がない、または「不明」ならデフォルトの0000.png）
       let srcFile = "0000.png";
       if (assignments[unyoKey] && assignments[unyoKey] !== "不明") {
         srcFile = assignments[unyoKey].trim() + ".png";
       }
 
-      // アイコンの上のテキストは、常にその列に入っている運用記号（AやGなど）にする
       return { src: srcFile, text: unyoKey };
+    }
+
+    // 【新設】HTML側の「運用一覧」テキストエリアを更新する関数
+    function updateUnyoListHTML() {
+      const container = d3.select("#unyo-list-content");
+      container.html(""); // 一旦クリア
+
+      unyoListKeys.forEach(unyo => {
+        const trainNum = currentAssignments[unyo] || "不明";
+        const imgSrc = trainNum !== "不明" ? trainNum + ".png" : "0000.png";
+
+        const item = container.append("div").attr("class", "unyo-list-item");
+        item.append("span").attr("class", "unyo-list-label").text(unyo);
+        item.append("img").attr("class", "unyo-list-img").attr("src", imgSrc);
+        item.append("span").text(trainNum);
+      });
     }
 
     // 列車読み込み
@@ -242,7 +299,7 @@
 
       const trainElems = svg.selectAll(".train").data(trains).enter().append("g").attr("class","train").attr("transform","translate(-100,-100)");
       const iconGroup = trainElems.append("g").attr("class", "icon-group").attr("transform", "translate(0, 0)");
-      trainElems.append("text").attr("class", "train-info-text").attr("x", 0).attr("y", 22).text(d => d.id);
+      trainElems.append("text").attr("class", "train-info-text").attr("x", 0).attr("y", 20).text(d => d.id); // 下テキストのy座標を微調整
 
       function updateIcons() {
         iconGroup.each(function(d) {
@@ -250,26 +307,47 @@
           const info1 = getFormationInfo(d, 1, currentAssignments); if (info1) iconList.push(info1);
           const info2 = getFormationInfo(d, 2, currentAssignments); if (info2) iconList.push(info2);
           const info3 = getFormationInfo(d, 3, currentAssignments); if (info3) iconList.push(info3);
-          const iconSize = 24; const iconSpacing = 4; const totalWidth = iconList.length * iconSize + (iconList.length - 1) * iconSpacing;
+          
+          // 【変更】横並びの間隔を少し狭く調整
+          const iconSize = 20;     // 24pxから20pxに縮小
+          const iconSpacing = 2;   // 隙間を4pxから2pxに縮小
+          const totalWidth = iconList.length * iconSize + (iconList.length - 1) * iconSpacing;
+          
           const itemGroups = g.selectAll("g.icon-item").data(iconList);
           const itemGroupsEnter = itemGroups.enter().append("g").attr("class", "icon-item");
           itemGroupsEnter.append("image"); itemGroupsEnter.append("text").attr("class", "train-info-text");
-          const itemGroupsUpdate = itemGroupsEnter.merge(itemGroups).attr("transform", (info, idx) => { const xPos = idx * (iconSize + iconSpacing) - totalWidth / 2; return `translate(${xPos}, -12)`; });
+          
+          const itemGroupsUpdate = itemGroupsEnter.merge(itemGroups).attr("transform", (info, idx) => { 
+            const xPos = idx * (iconSize + iconSpacing) - totalWidth / 2; 
+            return `translate(${xPos}, -10)`; // 上下の位置も少し詰める
+          });
+          
           itemGroupsUpdate.select("image").attr("xlink:href", info => info.src).attr("width", iconSize).attr("height", iconSize);
-          itemGroupsUpdate.select("text").attr("x", iconSize / 2).attr("y", -8).text(info => info.text);
+          itemGroupsUpdate.select("text").attr("x", iconSize / 2).attr("y", -6).text(info => info.text);
           itemGroups.exit().remove();
         });
       }
 
+      // 初期更新
       updateIcons();
+      updateUnyoListHTML();
 
-      // 運用投稿
+      // 運用投稿ボタン処理
       d3.select("#post-btn").on("click", () => {
         const selectedUnyo = d3.select("#unyo-select").property("value");
         const selectedTrain = d3.select("#train-select").property("value");
         currentAssignments[selectedUnyo] = selectedTrain;
         localStorage.setItem("unyo_assignments", JSON.stringify(currentAssignments));
+        
         updateIcons();
+        updateUnyoListHTML(); // 一覧側も即時反映
+      });
+
+      // 【新設】運用一覧ボタンの開閉トグル処理
+      d3.select("#toggle-list-btn").on("click", () => {
+        const modal = d3.select("#unyo-list-modal");
+        const isVisible = modal.style("display") === "block";
+        modal.style("display", isVisible ? "none" : "block");
       });
 
       const coords = {};
@@ -280,15 +358,12 @@
       const realtimeCheckbox = d3.select("#realtime-checkbox");
       const timeInput = d3.select("#target-time-input");
 
-      timeInput.on("input", () => {
-        realtimeCheckbox.property("checked", false);
-      });
+      timeInput.on("input", () => { realtimeCheckbox.property("checked", false); });
 
       // 更新ループ
       setInterval(()=>{
         const now = new Date();
         const isRealtime = realtimeCheckbox.property("checked");
-        
         let nowM = 0;
 
         if (isRealtime) {
@@ -298,18 +373,15 @@
           timeInput.property("value", `${hh}:${mm}`);
         } else {
           const timeVal = timeInput.property("value");
-          if (timeVal) {
-            const [hh, mm] = timeVal.split(":").map(Number);
-            nowM = hh * 60 + mm;
-          } else {
-            nowM = now.getHours() * 60 + now.getMinutes();
-          }
+          if (timeVal) { const [hh, mm] = timeVal.split(":").map(Number); nowM = hh * 60 + mm; } 
+          else { nowM = now.getHours() * 60 + now.getMinutes(); }
         }
 
         const todayStr = getTodayString();
         if (todayStr !== lastCheckedDate) { 
           currentAssignments = loadUnyoData(); 
           updateIcons(); 
+          updateUnyoListHTML();
           lastCheckedDate = todayStr; 
         }
 
@@ -329,11 +401,8 @@
               break;
             }
           }
-          if (pos){
-            trainElems.filter((d,idx)=>idx===i).attr("transform",`translate(${pos.x},${pos.y})`);
-          } else {
-            trainElems.filter((d,idx)=>idx===i).attr("transform","translate(-100,-100)");
-          }
+          if (pos){ trainElems.filter((d,idx)=>idx===i).attr("transform",`translate(${pos.x},${pos.y})`); } 
+          else { trainElems.filter((d,idx)=>idx===i).attr("transform","translate(-100,-100)"); }
         });
       },1000);
     });
