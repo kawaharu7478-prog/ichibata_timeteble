@@ -38,7 +38,7 @@
       font-size: 14px;
     }
 
-    /* 【新設】時刻管理コントロールのスタイル（画像イメージに準拠） */
+    /* 時刻管理コントロールのスタイル */
     #time-control-container {
       display: flex;
       align-items: center;
@@ -80,37 +80,37 @@
       transition: transform 0.3s;
       box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
-    .switch-input:checked + .switch-toggle { background: #8bb38d; } /* ON時の背景（お好みで） */
+    .switch-input:checked + .switch-toggle { background: #8bb38d; }
     .switch-input:checked + .switch-toggle::before { transform: translateX(16px); }
 
-    /* 時刻表示・入力ボックス（画像②イメージ） */
+    /* 時刻表示・入力ボックスの改善 */
     .time-display-wrapper {
       display: inline-flex;
       align-items: center;
       background: #1e2229;
-      color: white;
       padding: 8px 16px;
       border-radius: 12px;
-      font-size: 20px;
-      font-weight: bold;
       gap: 8px;
     }
-    .time-icon { font-size: 16px; }
+    .time-icon {
+      font-size: 16px;
+      color: white;
+    }
     .time-input {
       background: transparent;
       border: none;
-      color: white;
+      color: #ffffff !important; /* 文字色を絶対に白にする */
+      color-scheme: dark;       /* ブラウザにダークテーマとして扱わせて文字を白くする */
       font-size: 20px;
       font-weight: bold;
-      font-family: inherit;
+      font-family: monospace;   /* 等幅フォントで崩れにくくする */
       cursor: pointer;
       outline: none;
-      width: 70px;
+      width: 90px;              /* 幅に少し余裕を持たせる */
     }
-    /* カレンダー・時計アイコンを消してスッキリさせる（ブラウザ標準の選択は有効） */
+    /* 時計アイコンの調整 */
     .time-input::-webkit-calendar-picker-indicator {
       filter: invert(1);
-      margin-left: -10px;
       cursor: pointer;
     }
   </style>
@@ -174,7 +174,7 @@
     const svg = d3.select("#map");
     const height = +svg.attr("height");
 
-    // 駅定義・座標計算（変更なし）
+    // 駅定義・座標計算
     const mainStations = [
       "松江温泉","ガーデン前","朝日ヶ丘","長江","秋鹿町","フォーゲル","高ノ宮","津ノ森","伊野灘",
       "一畑口","園","湖遊館新駅","布崎","雲州平田","旅伏","美談","大寺","川跡",
@@ -198,8 +198,6 @@
     svg.selectAll(".station-label.branch").data(branchCoords).enter().append("text").attr("x",d=>d.x).attr("y",d=>d.y+20).text(d=>d.name).attr("class","station");
 
     function parseTime(val) { if (!val || isNaN(val)) return null; const num = parseInt(val); const hh = Math.floor(num/100); const mm = num % 100; return hh*60+mm; }
-
-    // 【変更】SVG内のtimeLabelオブジェクトは廃止（HTMLのinput内に表示するため）
 
     // 日付管理・データ保持ロジック
     function getTodayString() { const now = new Date(); return now.getFullYear() + "-" + (now.getMonth() + 1) + "-" + now.getDate(); }
@@ -225,7 +223,16 @@
       const trains = data.map(row=>{
         const schedule = {};
         Object.keys(row).forEach(k=>{ if (k!=="train_id" && k!=="train_name" && k!=="direction" && k!=="train_formation1" && k!=="train_formation2" && k!=="train_formation3") { schedule[k] = parseTime(row[k]); } });
-        return { id: row.train_id, name: row.train_name, dir: row.direction, formation1: row.train_formation1 ? row.train_formation1.trim() : "", formation2: row.train_formation2 ? row.formation2.trim() : "", formation3: row.train_formation3 ? row.train_formation3.trim() : "", schedule: schedule };
+        // 【修正】row.formation2.trim() となっていたタイポを row.train_formation2.trim() に修正
+        return { 
+          id: row.train_id, 
+          name: row.train_name, 
+          dir: row.direction, 
+          formation1: row.train_formation1 ? row.train_formation1.trim() : "", 
+          formation2: row.train_formation2 ? row.train_formation2.trim() : "", 
+          formation3: row.train_formation3 ? row.train_formation3.trim() : "", 
+          schedule: schedule 
+        };
       });
 
       const trainElems = svg.selectAll(".train").data(trains).enter().append("g").attr("class","train").attr("transform","translate(-100,-100)");
@@ -265,11 +272,9 @@
 
       let lastCheckedDate = getTodayString();
 
-      // 【新設】UI要素の参照とイベント登録
       const realtimeCheckbox = d3.select("#realtime-checkbox");
       const timeInput = d3.select("#target-time-input");
 
-      // 時刻入力を手動で変えたら自動的に「現在時刻」をOFFにする
       timeInput.on("input", () => {
         realtimeCheckbox.property("checked", false);
       });
@@ -279,28 +284,23 @@
         const now = new Date();
         const isRealtime = realtimeCheckbox.property("checked");
         
-        let nowM = 0; // 計算用の「その日の累計分数」
+        let nowM = 0;
 
         if (isRealtime) {
-          // 現在時刻モード
           nowM = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
-          
-          // 表示を現在の時刻（hh:mm）に更新
           const hh = String(now.getHours()).padStart(2, '0');
           const mm = String(now.getMinutes()).padStart(2, '0');
           timeInput.property("value", `${hh}:${mm}`);
         } else {
-          // 手動指定モード
-          const timeVal = timeInput.property("value"); // "22:40" などの文字列
+          const timeVal = timeInput.property("value");
           if (timeVal) {
             const [hh, mm] = timeVal.split(":").map(Number);
-            nowM = hh * 60 + mm; // 手動のときは秒は0として計算
+            nowM = hh * 60 + mm;
           } else {
             nowM = now.getHours() * 60 + now.getMinutes();
           }
         }
 
-        // 日付変更の監視
         const todayStr = getTodayString();
         if (todayStr !== lastCheckedDate) { 
           currentAssignments = loadUnyoData(); 
