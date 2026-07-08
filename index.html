@@ -309,8 +309,8 @@
           const info3 = getFormationInfo(d, 3, currentAssignments); if (info3) iconList.push(info3);
           
           // 【変更】横並びの間隔を少し狭く調整
-          const iconSize = 15;     // 24pxから15pxに縮小
-          const iconSpacing =1;   // 隙間を4pxから1pxに縮小
+          const iconSize = 30;     // アイコンの大きさ
+          const iconSpacing =1;   // アイコン同士の間隔
           const totalWidth = iconList.length * iconSize + (iconList.length - 1) * iconSpacing;
           
           const itemGroups = g.selectAll("g.icon-item").data(iconList);
