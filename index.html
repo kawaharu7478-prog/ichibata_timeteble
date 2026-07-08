@@ -203,18 +203,24 @@
     function loadUnyoData() { const savedDate = localStorage.getItem("unyo_date"); const today = getTodayString(); if (savedDate !== today) { localStorage.setItem("unyo_date", today); localStorage.setItem("unyo_assignments", JSON.stringify({})); return {}; } const assignments = localStorage.getItem("unyo_assignments"); return assignments ? JSON.parse(assignments) : {}; }
     let currentAssignments = loadUnyoData();
 
+    // 【修正】formation1, 2, 3 すべて運用記号（A, Gなど）として共通ロジックで処理する
     function getFormationInfo(train, formationNum, assignments) {
-      if (formationNum === 1) {
-        const unyoKey = train.formation1;
-        let srcFile = "0000.png";
-        if (unyoKey && assignments[unyoKey] && assignments[unyoKey] !== "不明") { srcFile = assignments[unyoKey] + ".png"; }
-        return { src: srcFile, text: unyoKey || "" };
-      } else if (formationNum === 2) {
-        return train.formation2 ? { src: train.formation2 + ".png", text: train.formation2 } : null;
-      } else if (formationNum === 3) {
-        return train.formation3 ? { src: train.formation3 + ".png", text: train.formation3 } : null;
+      let unyoKey = "";
+      if (formationNum === 1) unyoKey = train.formation1;
+      else if (formationNum === 2) unyoKey = train.formation2;
+      else if (formationNum === 3) unyoKey = train.formation3;
+
+      unyoKey = unyoKey ? unyoKey.trim() : "";
+      if (!unyoKey) return null; // そもそもCSVが空欄なら何も表示しない
+
+      // 投稿データから車両画像名を決定（投稿がない、または「不明」ならデフォルトの0000.png）
+      let srcFile = "0000.png";
+      if (assignments[unyoKey] && assignments[unyoKey] !== "不明") {
+        srcFile = assignments[unyoKey].trim() + ".png";
       }
-      return null;
+
+      // アイコンの上のテキストは、常にその列に入っている運用記号（AやGなど）にする
+      return { src: srcFile, text: unyoKey };
     }
 
     // 列車読み込み
@@ -223,7 +229,6 @@
         const schedule = {};
         Object.keys(row).forEach(k=>{ if (k!=="train_id" && k!=="train_name" && k!=="direction" && k!=="train_formation1" && k!=="train_formation2" && k!=="train_formation3") { schedule[k] = parseTime(row[k]); } });
         
-        // 【修正】row.formation2 と row.formation3 のタイポを完全に修正
         return { 
           id: row.train_id, 
           name: row.train_name, 
