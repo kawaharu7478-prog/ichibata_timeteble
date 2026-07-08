@@ -11,16 +11,63 @@
     .time-label { font-size: 20px; font-weight: bold; text-anchor: middle; }
     .train text { font-size: 10px; font-weight: bold; text-anchor: middle; dominant-baseline: middle; }
 
-    /* 修正① 横スクロール対応 */
+    /* 横スクロール対応 */
     #map-container {
       width: 100%;
       overflow-x: auto;
       border: 1px solid #ccc;
     }
+
+    /* 運用投稿フォームのスタイル */
+    #post-container {
+      margin-bottom: 20px;
+      padding: 10px;
+      background-color: #f0f0f0;
+      border-radius: 5px;
+    }
+    #post-container select, #post-container button {
+      padding: 5px;
+      margin-right: 10px;
+      font-size: 14px;
+    }
   </style>
 </head>
 <body>
-  <!-- 修正②: svgをラップ -->
+
+  <div id="post-container">
+    <label for="unyo-select">運用:</label>
+    <select id="unyo-select">
+      <option value="A">A</option>
+      <option value="B">B</option>
+      <option value="C">C</option>
+      <option value="D出">D出</option>
+      <option value="D中">D中</option>
+      <option value="D畑">D畑</option>
+      <option value="E">E</option>
+      <option value="F">F</option>
+      <option value="G">G</option>
+      <option value="H">H</option>
+      <option value="I">I</option>
+    </select>
+
+    <label for="train-select">車両:</label>
+    <select id="train-select">
+      <option value="不明">不明</option>
+      <option value="5009">5009</option>
+      <option value="1001">1001</option>
+      <option value="1002">1002</option>
+      <option value="1003">1003</option>
+      <option value="7001">7001</option>
+      <option value="7002">7002</option>
+      <option value="7003">7003</option>
+      <option value="7004">7004</option>
+      <option value="8001">8001</option>
+      <option value="8002">8002</option>
+    </select>
+
+    <button id="post-btn">運用投稿</button>
+  </div>
+
   <div id="map-container">
     <svg id="map" height="800"></svg>
   </div>
@@ -51,7 +98,7 @@
     branchCoords[0].x = kawatoMain.x;
     branchCoords[0].y = branchCoords[1].y; // 川跡を高浜と同じ高さに
 
-    // 修正③: SVGの幅を自動計算
+    // SVGの幅を自動計算
     const maxX = Math.max(
       ...[...mainCoords, ...branchCoords].map(d => d.x)
     ) + 200;
@@ -111,12 +158,63 @@
       .attr("x",maxX/2).attr("y",50)
       .attr("class","time-label");
 
+    // -------------------------------------------------------------
+    // 運用データ管理ロジック
+    // -------------------------------------------------------------
+    function getTodayString() {
+      const now = new Date();
+      return now.getFullYear() + "-" + (now.getMonth() + 1) + "-" + now.getDate();
+    }
+
+    // 保存データの初期化・日付チェック
+    function loadUnyoData() {
+      const savedDate = localStorage.getItem("unyo_date");
+      const today = getTodayString();
+      if (savedDate !== today) {
+        localStorage.setItem("unyo_date", today);
+        localStorage.setItem("unyo_assignments", JSON.stringify({}));
+        return {};
+      }
+      const assignments = localStorage.getItem("unyo_assignments");
+      return assignments ? JSON.parse(assignments) : {};
+    }
+
+    let currentAssignments = loadUnyoData();
+
+    // 列車名からどの運用(A〜I)に属するか判定する関数
+    function detectUnyoKey(trainName) {
+      const unyoKeys = ["A", "B", "C", "D出", "D中", "D畑", "E", "F", "G", "H", "I"];
+      for (const key of unyoKeys) {
+        if (trainName.includes(key)) return key;
+      }
+      return null;
+    }
+
+    // アイコン画像名を取得する関数
+    function getIconSrc(train, formationNum, assignments) {
+      const unyoKey = detectUnyoKey(train.name);
+      
+      // train_formation1 の場合のみ、投稿された運用データを反映
+      if (formationNum === 1) {
+        if (unyoKey && assignments[unyoKey] && assignments[unyoKey] !== "不明") {
+          return assignments[unyoKey] + ".png";
+        }
+        // 投稿がない、または「不明」の場合は初期値として csv の formation1 を見る。それも無ければ "0000.png"
+        return (train.formation1 && train.formation1 !== "不明" && train.formation1 !== "") ? train.formation1 + ".png" : "0000.png";
+      } else if (formationNum === 2) {
+        return (train.formation2 && train.formation2 !== "") ? train.formation2 + ".png" : null;
+      } else if (formationNum === 3) {
+        return (train.formation3 && train.formation3 !== "") ? train.formation3 + ".png" : null;
+      }
+      return null;
+    }
+
     // 列車読み込み
     d3.csv("trains.csv").then(data=>{
       const trains = data.map(row=>{
         const schedule = {};
         Object.keys(row).forEach(k=>{
-          if (k!=="train_id" && k!=="train_name" && k!=="direction") {
+          if (k!=="train_id" && k!=="train_name" && k!=="direction" && k!=="train_formation1" && k!=="train_formation2" && k!=="train_formation3") {
             schedule[k] = parseTime(row[k]);
           }
         });
@@ -124,11 +222,14 @@
           id: row.train_id,
           name: row.train_name,
           dir: row.direction,
+          formation1: row.train_formation1 || "",
+          formation2: row.train_formation2 || "",
+          formation3: row.train_formation3 || "",
           schedule: schedule
         };
       });
 
-      // 列車アイコン
+      // 列車グループ
       const trainElems = svg.selectAll(".train")
         .data(trains).enter()
         .append("g")
@@ -155,15 +256,81 @@
         .attr("fill",d=>getTrainStyle(d.name).fill)
         .attr("stroke","black");
 
+      // アイコンを配置するコンテナグループを矢印の右側に追加
+      const iconGroup = trainElems.append("g")
+        .attr("class", "icon-group")
+        .attr("transform", (d, i) => {
+          const w = labels.nodes()[i].getBBox().width + 16;
+          return `translate(${w/2 + 5}, -12)`; // 矢印の右端から少し離して配置（高さ調整-12）
+        });
+
+      // アイコン描画・更新関数
+      function updateIcons() {
+        // 各列車グループ内のアイコングループに対して処理
+        iconGroup.each(function(d) {
+          const g = d3.select(this);
+          
+          // 表示すべきアイコンのリストを作成
+          const iconList = [];
+          const src1 = getIconSrc(d, 1, currentAssignments);
+          if (src1) iconList.push(src1);
+          
+          const src2 = getIconSrc(d, 2, currentAssignments);
+          if (src2) iconList.push(src2);
+          
+          const src3 = getIconSrc(d, 3, currentAssignments);
+          if (src3) iconList.push(src3);
+
+          // データバインドしてイメージ要素を更新・追加・削除
+          const imgs = g.selectAll("image").data(iconList);
+          
+          // 既存＋新規の更新
+          imgs.enter()
+            .append("image")
+            .merge(imgs)
+            .attr("xlink:href", src => src)
+            .attr("width", 24)  // アイコンのサイズ（適宜調整してください）
+            .attr("height", 24)
+            .attr("x", (src, idx) => idx * 26); // 横に並べるためのオフセット
+
+          imgs.exit().remove();
+        });
+      }
+
+      // 初回アイコン描画
+      updateIcons();
+
+      // 投稿ボタンのクリックイベント
+      d3.select("#post-btn").on("click", () => {
+        const selectedUnyo = d3.select("#unyo-select").property("value");
+        const selectedTrain = d3.select("#train-select").property("value");
+
+        currentAssignments[selectedUnyo] = selectedTrain;
+        localStorage.setItem("unyo_assignments", JSON.stringify(currentAssignments));
+        
+        // アイコン表示に即時反映
+        updateIcons();
+      });
+
       // 駅座標辞書
       const coords = {};
       [...mainCoords,...branchCoords].forEach(d=>coords[d.name]=d);
+
+      let lastCheckedDate = getTodayString();
 
       // 更新ループ
       setInterval(()=>{
         const now = new Date();
         const nowM = now.getHours()*60+now.getMinutes()+now.getSeconds()/60;
         timeLabel.text(d3.timeFormat("%H:%M:%S")(now));
+
+        // 日付変更チェック（日付が変わったらリセット）
+        const todayStr = getTodayString();
+        if (todayStr !== lastCheckedDate) {
+          currentAssignments = loadUnyoData();
+          updateIcons();
+          lastCheckedDate = todayStr;
+        }
 
         trains.forEach((train,i)=>{
           const stops = Object.entries(train.schedule).filter(([st,t])=>t!=null);
@@ -195,4 +362,3 @@
   </script>
 </body>
 </html>
-
