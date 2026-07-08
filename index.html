@@ -83,7 +83,7 @@
     .switch-input:checked + .switch-toggle { background: #8bb38d; }
     .switch-input:checked + .switch-toggle::before { transform: translateX(16px); }
 
-    /* 時刻表示・入力ボックスの改善 */
+    /* 時刻表示・入力ボックス */
     .time-display-wrapper {
       display: inline-flex;
       align-items: center;
@@ -99,16 +99,15 @@
     .time-input {
       background: transparent;
       border: none;
-      color: #ffffff !important; /* 文字色を絶対に白にする */
-      color-scheme: dark;       /* ブラウザにダークテーマとして扱わせて文字を白くする */
+      color: #ffffff !important;
+      color-scheme: dark;
       font-size: 20px;
       font-weight: bold;
-      font-family: monospace;   /* 等幅フォントで崩れにくくする */
+      font-family: monospace;
       cursor: pointer;
       outline: none;
-      width: 90px;              /* 幅に少し余裕を持たせる */
+      width: 90px;
     }
-    /* 時計アイコンの調整 */
     .time-input::-webkit-calendar-picker-indicator {
       filter: invert(1);
       cursor: pointer;
@@ -223,7 +222,8 @@
       const trains = data.map(row=>{
         const schedule = {};
         Object.keys(row).forEach(k=>{ if (k!=="train_id" && k!=="train_name" && k!=="direction" && k!=="train_formation1" && k!=="train_formation2" && k!=="train_formation3") { schedule[k] = parseTime(row[k]); } });
-        // 【修正】row.formation2.trim() となっていたタイポを row.train_formation2.trim() に修正
+        
+        // 【修正】row.formation2 と row.formation3 のタイポを完全に修正
         return { 
           id: row.train_id, 
           name: row.train_name, 
