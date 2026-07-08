@@ -61,6 +61,8 @@
     <label for="train-select">車両:</label>
     <select id="train-select">
       <option value="不明">不明</option>
+      <option value="2101">2101</option>
+      <option value="2103">2103</option>
       <option value="5009">5009</option>
       <option value="1001">1001</option>
       <option value="1002">1002</option>
@@ -116,16 +118,21 @@
     function loadUnyoData() { const savedDate = localStorage.getItem("unyo_date"); const today = getTodayString(); if (savedDate !== today) { localStorage.setItem("unyo_date", today); localStorage.setItem("unyo_assignments", JSON.stringify({})); return {}; } const assignments = localStorage.getItem("unyo_assignments"); return assignments ? JSON.parse(assignments) : {}; }
     let currentAssignments = loadUnyoData();
 
-    // アイコンの画像パスと、その上に表示するテキストを決定する関数
+    // アイコンの画像パスと、その上に表示するテキスト（常に運用名）を決定する関数
     function getFormationInfo(train, formationNum, assignments) {
       if (formationNum === 1) {
         const unyoKey = train.formation1; // "A" など
+        
+        // アイコン画像名の判定（投稿があればそれを使い、無ければ0000.png）
+        let srcFile = "0000.png";
         if (unyoKey && assignments[unyoKey] && assignments[unyoKey] !== "不明") {
-          return { src: assignments[unyoKey] + ".png", text: assignments[unyoKey] };
+          srcFile = assignments[unyoKey] + ".png";
         }
-        // 未投稿時は 0000.png を表示し、文字は元の運用名("A"など)を出す
-        return { src: "0000.png", text: unyoKey || "" };
+        
+        // 【修正】アイコン上のテキストは車両名にせず、常に元の運用名（unyoKey）を表示
+        return { src: srcFile, text: unyoKey || "" };
       } else if (formationNum === 2) {
+        // train_formation2, 3 の場合は、対応する列（空欄でなければ）の文字を表示
         return train.formation2 ? { src: train.formation2 + ".png", text: train.formation2 } : null;
       } else if (formationNum === 3) {
         return train.formation3 ? { src: train.formation3 + ".png", text: train.formation3 } : null;
@@ -163,13 +170,13 @@
       // アイコンと上下テキストを格納するコンテナ
       const iconGroup = trainElems.append("g")
         .attr("class", "icon-group")
-        .attr("transform", "translate(0, 0)"); // 基準点を合わせるためYは0に
+        .attr("transform", "translate(0, 0)");
 
-      // 列車ID（常にアイコンの下に1つだけ表示）
+      // 列車ID（常にアイコンの下に固定）
       trainElems.append("text")
         .attr("class", "train-info-text")
         .attr("x", 0)
-        .attr("y", 22) // アイコン（高さ24）の下側に配置
+        .attr("y", 22)
         .text(d => d.id);
 
       // アイコン表示と上のテキストの更新処理
@@ -186,35 +193,30 @@
           const iconSpacing = 4;
           const totalWidth = iconList.length * iconSize + (iconList.length - 1) * iconSpacing;
 
-          // 各編成ごとの要素をまとめるグループ（コンテナ内のコンテナ）をデータバインド
           const itemGroups = g.selectAll("g.icon-item").data(iconList);
           
-          // 新しく入ってきた編成データのグループを作成
           const itemGroupsEnter = itemGroups.enter()
             .append("g")
             .attr("class", "icon-item");
 
-          // 新規グループに画像とテキストを追加
           itemGroupsEnter.append("image");
           itemGroupsEnter.append("text").attr("class", "train-info-text");
 
-          // 既存と新規を合流させて位置と中身を更新
           const itemGroupsUpdate = itemGroupsEnter.merge(itemGroups)
             .attr("transform", (info, idx) => {
               const xPos = idx * (iconSize + iconSpacing) - totalWidth / 2;
-              return `translate(${xPos}, -12)`; // アイコンのY位置調整
+              return `translate(${xPos}, -12)`;
             });
 
-          // 画像の属性更新
           itemGroupsUpdate.select("image")
             .attr("xlink:href", info => info.src)
             .attr("width", iconSize)
             .attr("height", iconSize);
 
-          // アイコン「上」のテキスト(formation)の更新
+          // アイコン「上」のテキスト（常に運用名、または増結編成名）
           itemGroupsUpdate.select("text")
             .attr("x", iconSize / 2)
-            .attr("y", -8) // アイコンの上側
+            .attr("y", -8)
             .text(info => info.text);
 
           itemGroups.exit().remove();
