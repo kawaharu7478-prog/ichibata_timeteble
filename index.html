@@ -9,7 +9,7 @@
     .station { font-size: 12px; text-anchor: middle; }
     .line { stroke: black; stroke-width: 2; fill: none; }
     .time-label { font-size: 20px; font-weight: bold; text-anchor: middle; }
-    .train text { font-size: 10px; font-weight: bold; text-anchor: middle; dominant-baseline: middle; }
+    /* .train text, .train polygon のスタイルは不要になるため削除 */
 
     /* 横スクロール対応 */
     #map-container {
@@ -76,270 +76,123 @@
     const svg = d3.select("#map");
     const height = +svg.attr("height");
 
-    // 本線と支線の駅
+    // 駅定義、座標計算、路線・駅描画部分は変更なし
     const mainStations = [
       "松江温泉","ガーデン前","朝日ヶ丘","長江","秋鹿町","フォーゲル","高ノ宮","津ノ森","伊野灘",
       "一畑口","園","湖遊館新駅","布崎","雲州平田","旅伏","美談","大寺","川跡",
       "武志","大津町","科学館前","電鉄出雲市"
     ];
     const branchStations = ["川跡","高浜","遥堪","浜山公園北口","出雲大社前"];
-
-    const stationSpacing = 60;  // 駅間隔を少し広げた
-
-    // 本線座標
+    const stationSpacing = 60;
     const mainCoords = mainStations.map((d,i)=>({name:d,x:100+i*stationSpacing,y:200}));
-    // 支線座標
     const kawatoMain = mainCoords.find(s=>s.name==="川跡");
-    const branchCoords = branchStations.map((d,i)=>({
-      name:d,
-      x: kawatoMain.x + (i*stationSpacing),
-      y: kawatoMain.y+stationSpacing+50
-    }));
-    branchCoords[0].x = kawatoMain.x;
-    branchCoords[0].y = branchCoords[1].y; // 川跡を高浜と同じ高さに
-
-    // SVGの幅を自動計算
-    const maxX = Math.max(
-      ...[...mainCoords, ...branchCoords].map(d => d.x)
-    ) + 200;
+    const branchCoords = branchStations.map((d,i)=>({name:d,x: kawatoMain.x + (i*stationSpacing),y: kawatoMain.y+stationSpacing+50}));
+    branchCoords[0].x = kawatoMain.x; branchCoords[0].y = branchCoords[1].y;
+    const maxX = Math.max(...[...mainCoords, ...branchCoords].map(d => d.x)) + 200;
     svg.attr("width", maxX);
 
-    // 線を描画
-    svg.append("polyline")
-      .attr("points", mainCoords.map(d=>`${d.x},${d.y}`).join(" "))
-      .attr("class","line");
-    svg.append("polyline")
-      .attr("points", branchCoords.map(d=>`${d.x},${d.y}`).join(" "))
-      .attr("class","line");
+    svg.append("polyline").attr("points", mainCoords.map(d=>`${d.x},${d.y}`).join(" ")).attr("class","line");
+    svg.append("polyline").attr("points", branchCoords.map(d=>`${d.x},${d.y}`).join(" ")).attr("class","line");
+    svg.selectAll(".station.main").data(mainCoords).enter().append("circle").attr("cx",d=>d.x).attr("cy",d=>d.y).attr("r",5).attr("fill","black");
+    svg.selectAll(".station.branch").data(branchCoords).enter().append("circle").attr("cx",d=>d.x).attr("cy",d=>d.y).attr("r",5).attr("fill","black");
+    svg.selectAll(".station-label.main").data(mainCoords).enter().append("text").attr("x",d=>d.x).attr("y",d=>d.y-10).text(d=>d.name).attr("class","station");
+    svg.selectAll(".station-label.branch").data(branchCoords).enter().append("text").attr("x",d=>d.x).attr("y",d=>d.y+20).text(d=>d.name).attr("class","station");
 
-    // 駅を描画
-    svg.selectAll(".station.main")
-      .data(mainCoords).enter().append("circle")
-      .attr("cx",d=>d.x).attr("cy",d=>d.y).attr("r",5).attr("fill","black");
-    svg.selectAll(".station.branch")
-      .data(branchCoords).enter().append("circle")
-      .attr("cx",d=>d.x).attr("cy",d=>d.y).attr("r",5).attr("fill","black");
+    function parseTime(val) { if (!val || isNaN(val)) return null; const num = parseInt(val); const hh = Math.floor(num/100); const mm = num % 100; return hh*60+mm; }
 
-    // 駅名ラベル
-    svg.selectAll(".station-label.main")
-      .data(mainCoords).enter().append("text")
-      .attr("x",d=>d.x).attr("y",d=>d.y-10)
-      .text(d=>d.name).attr("class","station");
-    svg.selectAll(".station-label.branch")
-      .data(branchCoords).enter().append("text")
-      .attr("x",d=>d.x).attr("y",d=>d.y+20)
-      .text(d=>d.name).attr("class","station");
+    // 【変更】getTrainStyle関数は不要になるため削除（色分け不要）
 
-    // 時刻を分に変換
-    function parseTime(val) {
-      if (!val || isNaN(val)) return null;
-      const num = parseInt(val);
-      const hh = Math.floor(num/100);
-      const mm = num % 100;
-      return hh*60+mm;
-    }
+    const timeLabel = svg.append("text").attr("x",maxX/2).attr("y",50).attr("class","time-label");
 
-    // 列車の色と文字色
-    function getTrainStyle(name) {
-      if (name.includes("A")) return {fill: "red", text: "white"};
-      if (name.includes("B")) return {fill: "green", text: "white"};
-      if (name.includes("C")) return {fill: "yellow", text: "black"};
-      if (name.includes("D")) return {fill: "blue", text: "white"};
-      if (name.includes("E")) return {fill: "none", text: "black"};
-      if (name.includes("F")) return {fill: "cyan", text: "black"};
-      if (name.includes("G")) return {fill: "orange", text: "white"};
-      if (name.includes("H")) return {fill: "pink", text: "black"};
-      if (name.includes("I")) return {fill: "lime", text: "black"};
-      return {fill: "gray", text: "white"};
-    }
-
-    // 現在時刻表示
-    const timeLabel = svg.append("text")
-      .attr("x",maxX/2).attr("y",50)
-      .attr("class","time-label");
-
-    // -------------------------------------------------------------
-    // 運用データ管理ロジック
-    // -------------------------------------------------------------
-    function getTodayString() {
-      const now = new Date();
-      return now.getFullYear() + "-" + (now.getMonth() + 1) + "-" + now.getDate();
-    }
-
-    // 保存データの初期化・日付チェック
-    function loadUnyoData() {
-      const savedDate = localStorage.getItem("unyo_date");
-      const today = getTodayString();
-      if (savedDate !== today) {
-        localStorage.setItem("unyo_date", today);
-        localStorage.setItem("unyo_assignments", JSON.stringify({}));
-        return {};
-      }
-      const assignments = localStorage.getItem("unyo_assignments");
-      return assignments ? JSON.parse(assignments) : {};
-    }
-
+    // 運用データ管理ロジック（変更なし）
+    function getTodayString() { const now = new Date(); return now.getFullYear() + "-" + (now.getMonth() + 1) + "-" + now.getDate(); }
+    function loadUnyoData() { const savedDate = localStorage.getItem("unyo_date"); const today = getTodayString(); if (savedDate !== today) { localStorage.setItem("unyo_date", today); localStorage.setItem("unyo_assignments", JSON.stringify({})); return {}; } const assignments = localStorage.getItem("unyo_assignments"); return assignments ? JSON.parse(assignments) : {}; }
     let currentAssignments = loadUnyoData();
-
-    // 列車名からどの運用(A〜I)に属するか判定する関数
-    function detectUnyoKey(trainName) {
-      const unyoKeys = ["A", "B", "C", "D出", "D中", "D畑", "E", "F", "G", "H", "I"];
-      for (const key of unyoKeys) {
-        if (trainName.includes(key)) return key;
-      }
-      return null;
-    }
-
-    // アイコン画像名を取得する関数
-    function getIconSrc(train, formationNum, assignments) {
-      const unyoKey = detectUnyoKey(train.name);
-      
-      // train_formation1 の場合のみ、投稿された運用データを反映
-      if (formationNum === 1) {
-        if (unyoKey && assignments[unyoKey] && assignments[unyoKey] !== "不明") {
-          return assignments[unyoKey] + ".png";
-        }
-        // 投稿がない、または「不明」の場合は初期値として csv の formation1 を見る。それも無ければ "0000.png"
-        return (train.formation1 && train.formation1 !== "不明" && train.formation1 !== "") ? train.formation1 + ".png" : "0000.png";
-      } else if (formationNum === 2) {
-        return (train.formation2 && train.formation2 !== "") ? train.formation2 + ".png" : null;
-      } else if (formationNum === 3) {
-        return (train.formation3 && train.formation3 !== "") ? train.formation3 + ".png" : null;
-      }
-      return null;
-    }
+    function detectUnyoKey(trainName) { const unyoKeys = ["A", "B", "C", "D出", "D中", "D畑", "E", "F", "G", "H", "I"]; for (const key of unyoKeys) { if (trainName.includes(key)) return key; } return null; }
+    function getIconSrc(train, formationNum, assignments) { const unyoKey = detectUnyoKey(train.name); if (formationNum === 1) { if (unyoKey && assignments[unyoKey] && assignments[unyoKey] !== "不明") { return assignments[unyoKey] + ".png"; } return (train.formation1 && train.formation1 !== "不明" && train.formation1 !== "") ? train.formation1 + ".png" : "0000.png"; } else if (formationNum === 2) { return (train.formation2 && train.formation2 !== "") ? train.formation2 + ".png" : null; } else if (formationNum === 3) { return (train.formation3 && train.formation3 !== "") ? train.formation3 + ".png" : null; } return null; }
 
     // 列車読み込み
     d3.csv("trains.csv").then(data=>{
       const trains = data.map(row=>{
         const schedule = {};
-        Object.keys(row).forEach(k=>{
-          if (k!=="train_id" && k!=="train_name" && k!=="direction" && k!=="train_formation1" && k!=="train_formation2" && k!=="train_formation3") {
-            schedule[k] = parseTime(row[k]);
-          }
-        });
-        return {
-          id: row.train_id,
-          name: row.train_name,
-          dir: row.direction,
-          formation1: row.train_formation1 || "",
-          formation2: row.train_formation2 || "",
-          formation3: row.train_formation3 || "",
-          schedule: schedule
-        };
+        Object.keys(row).forEach(k=>{ if (k!=="train_id" && k!=="train_name" && k!=="direction" && k!=="train_formation1" && k!=="train_formation2" && k!=="train_formation3") { schedule[k] = parseTime(row[k]); } });
+        return { id: row.train_id, name: row.train_name, dir: row.direction, formation1: row.train_formation1 || "", formation2: row.train_formation2 || "", formation3: row.train_formation3 || "", schedule: schedule };
       });
 
-      // 列車グループ
+      // 列車グループ（g要素）のみ作成
       const trainElems = svg.selectAll(".train")
         .data(trains).enter()
         .append("g")
         .attr("class","train")
         .attr("transform","translate(-100,-100)");
 
-      // テキスト
-      const labels = trainElems.append("text")
-        .attr("x",0).attr("y",0)
-        .text(d=>d.name)
-        .attr("fill",d=>getTrainStyle(d.name).text);
+      // 【変更】テキスト（train_name）の描画を廃止
+      // 【変更】ポリゴン（矢印）の描画を廃止
 
-      // 枠 (矢印型ポリゴン)
-      trainElems.insert("polygon","text")
-        .attr("points",(d,i)=>{
-          const w = labels.nodes()[i].getBBox().width + 16;
-          const h = 16;
-          if (d.dir==="up") {
-            return `-${w/2},-${h/2} ${w/2-5},-${h/2} ${w/2},0 ${w/2-5},${h/2} -${w/2},${h/2}`;
-          } else {
-            return `${w/2},-${h/2} -${w/2-5},-${h/2} -${w/2},0 -${w/2-5},${h/2} ${w/2},${h/2}`;
-          }
-        })
-        .attr("fill",d=>getTrainStyle(d.name).fill)
-        .attr("stroke","black");
-
-      // アイコンを配置するコンテナグループを矢印の右側に追加
+      // アイコンを配置するコンテナグループ（位置調整を微修正）
       const iconGroup = trainElems.append("g")
         .attr("class", "icon-group")
-        .attr("transform", (d, i) => {
-          const w = labels.nodes()[i].getBBox().width + 16;
-          return `translate(${w/2 + 5}, -12)`; // 矢印の右端から少し離して配置（高さ調整-12）
-        });
+        .attr("transform", "translate(0, -12)"); // グループの中心を基準にするためXのオフセットを0に
 
-      // アイコン描画・更新関数
+      // アイコン描画・更新関数（変更なし）
       function updateIcons() {
-        // 各列車グループ内のアイコングループに対して処理
         iconGroup.each(function(d) {
           const g = d3.select(this);
-          
-          // 表示すべきアイコンのリストを作成
           const iconList = [];
-          const src1 = getIconSrc(d, 1, currentAssignments);
-          if (src1) iconList.push(src1);
-          
-          const src2 = getIconSrc(d, 2, currentAssignments);
-          if (src2) iconList.push(src2);
-          
-          const src3 = getIconSrc(d, 3, currentAssignments);
-          if (src3) iconList.push(src3);
+          const src1 = getIconSrc(d, 1, currentAssignments); if (src1) iconList.push(src1);
+          const src2 = getIconSrc(d, 2, currentAssignments); if (src2) iconList.push(src2);
+          const src3 = getIconSrc(d, 3, currentAssignments); if (src3) iconList.push(src3);
 
-          // データバインドしてイメージ要素を更新・追加・削除
           const imgs = g.selectAll("image").data(iconList);
           
-          // 既存＋新規の更新
+          const iconSize = 24;
+          const iconSpacing = 2;
+          const totalWidth = iconList.length * iconSize + (iconList.length - 1) * iconSpacing;
+
           imgs.enter()
             .append("image")
             .merge(imgs)
             .attr("xlink:href", src => src)
-            .attr("width", 24)  // アイコンのサイズ（適宜調整してください）
-            .attr("height", 24)
-            .attr("x", (src, idx) => idx * 26); // 横に並べるためのオフセット
+            .attr("width", iconSize)
+            .attr("height", iconSize)
+            // 【微修正】アイコン全体がg要素のX座標中心（列車の現在地）にくるように配置
+            .attr("x", (src, idx) => idx * (iconSize + iconSpacing) - totalWidth / 2);
 
           imgs.exit().remove();
         });
       }
 
-      // 初回アイコン描画
       updateIcons();
 
-      // 投稿ボタンのクリックイベント
+      // 投稿ボタンのクリックイベント（変更なし）
       d3.select("#post-btn").on("click", () => {
         const selectedUnyo = d3.select("#unyo-select").property("value");
         const selectedTrain = d3.select("#train-select").property("value");
-
         currentAssignments[selectedUnyo] = selectedTrain;
         localStorage.setItem("unyo_assignments", JSON.stringify(currentAssignments));
-        
-        // アイコン表示に即時反映
         updateIcons();
       });
 
-      // 駅座標辞書
       const coords = {};
       [...mainCoords,...branchCoords].forEach(d=>coords[d.name]=d);
 
       let lastCheckedDate = getTodayString();
 
-      // 更新ループ
+      // 更新ループ（変更なし）
       setInterval(()=>{
         const now = new Date();
         const nowM = now.getHours()*60+now.getMinutes()+now.getSeconds()/60;
         timeLabel.text(d3.timeFormat("%H:%M:%S")(now));
 
-        // 日付変更チェック（日付が変わったらリセット）
         const todayStr = getTodayString();
-        if (todayStr !== lastCheckedDate) {
-          currentAssignments = loadUnyoData();
-          updateIcons();
-          lastCheckedDate = todayStr;
-        }
+        if (todayStr !== lastCheckedDate) { currentAssignments = loadUnyoData(); updateIcons(); lastCheckedDate = todayStr; }
 
         trains.forEach((train,i)=>{
           const stops = Object.entries(train.schedule).filter(([st,t])=>t!=null);
           stops.sort((a,b)=>a[1]-b[1]);
-
           let pos=null;
           for (let j=0;j<stops.length-1;j++){
-            const [s1,t1]=stops[j];
-            const [s2,t2]=stops[j+1];
+            const [s1,t1]=stops[j]; const [s2,t2]=stops[j+1];
             if (nowM>=t1 && nowM<=t2){
               const p=(nowM-t1)/(t2-t1);
               const c1=coords[s1],c2=coords[s2];
@@ -350,11 +203,9 @@
             }
           }
           if (pos){
-            trainElems.filter((d,idx)=>idx===i)
-              .attr("transform",`translate(${pos.x},${pos.y})`);
+            trainElems.filter((d,idx)=>idx===i).attr("transform",`translate(${pos.x},${pos.y})`);
           } else {
-            trainElems.filter((d,idx)=>idx===i)
-              .attr("transform","translate(-100,-100)");
+            trainElems.filter((d,idx)=>idx===i).attr("transform","translate(-100,-100)");
           }
         });
       },1000);
