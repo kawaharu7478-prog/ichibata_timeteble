@@ -39,9 +39,9 @@
       cursor: pointer;
     }
 
-    /* 【新設】運用一覧表示エリアのスタイル */
+    /* 運用一覧表示エリアのスタイル */
     #unyo-list-modal {
-      display: none; /* 初期状態は非表示 */
+      display: none;
       margin-bottom: 15px;
       padding: 15px;
       background-color: #fffff0;
@@ -66,9 +66,11 @@
     .unyo-list-label {
       width: 50px;
     }
+
+    /* 💡【運用一覧内の画像サイズ】変更する場合はここ（20px）を調整 */
     .unyo-list-img {
-      width: 25px;
-      height: 25px;
+      width: 20px;
+      height: 20px;
       margin-right: 8px;
       object-fit: contain;
     }
@@ -79,6 +81,7 @@
       align-items: center;
       gap: 15px;
       margin-bottom: 20px;
+      flex-wrap: wrap;
     }
 
     /* トグルスイッチの見た目 */
@@ -147,10 +150,22 @@
       filter: invert(1);
       cursor: pointer;
     }
+
+    /* 【新設】ダイヤ選択プルダウンのスタイル */
+    #schedule-select {
+      padding: 8px 12px;
+      font-size: 14px;
+      font-weight: bold;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      background-color: #fff;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
 
+  <!-- 運用投稿UI -->
   <div id="post-container">
     <label for="unyo-select">運用:</label>
     <select id="unyo-select">
@@ -188,11 +203,13 @@
     <button id="toggle-list-btn">運用一覧 表示/非表示</button>
   </div>
 
+  <!-- 運用一覧表示エリア -->
   <div id="unyo-list-modal">
     <h3>現在の運用車両一覧</h3>
     <div id="unyo-list-content"></div>
   </div>
 
+  <!-- 時刻コントロールUI ＋ ダイヤ選択 -->
   <div id="time-control-container">
     <label class="switch-label">
       <input type="checkbox" id="realtime-checkbox" class="switch-input" checked>
@@ -204,8 +221,18 @@
       <span class="time-icon">🕒</span>
       <input type="time" id="target-time-input" class="time-input">
     </div>
+
+    <!-- 【新設】ダイヤ種別選択プルダウン -->
+    <select id="schedule-select">
+      <option value="weekday.csv">平日</option>
+      <option value="holiday.csv">土休日</option>
+      <option value="newyear.csv">正月</option>
+      <option value="suigousai.csv">水郷祭</option>
+      <option value="shinwamaturi.csv">神話祭り</option>
+    </select>
   </div>
 
+  <!-- svgをラップ -->
   <div id="map-container">
     <svg id="map" height="800"></svg>
   </div>
@@ -264,10 +291,10 @@
       return { src: srcFile, text: unyoKey };
     }
 
-    // 【新設】HTML側の「運用一覧」テキストエリアを更新する関数
+    // HTML側の「運用一覧」テキストエリアを更新する関数
     function updateUnyoListHTML() {
       const container = d3.select("#unyo-list-content");
-      container.html(""); // 一旦クリア
+      container.html("");
 
       unyoListKeys.forEach(unyo => {
         const trainNum = currentAssignments[unyo] || "不明";
@@ -280,113 +307,141 @@
       });
     }
 
-    // 列車読み込み
-    d3.csv("weekday.csv").then(data=>{
-      const trains = data.map(row=>{
-        const schedule = {};
-        Object.keys(row).forEach(k=>{ if (k!=="train_id" && k!=="train_name" && k!=="direction" && k!=="train_formation1" && k!=="train_formation2" && k!=="train_formation3") { schedule[k] = parseTime(row[k]); } });
-        
-        return { 
-          id: row.train_id, 
-          name: row.train_name, 
-          dir: row.direction, 
-          formation1: row.train_formation1 ? row.train_formation1.trim() : "", 
-          formation2: row.train_formation2 ? row.train_formation2.trim() : "", 
-          formation3: row.train_formation3 ? row.train_formation3.trim() : "", 
-          schedule: schedule 
-        };
-      });
+    // グローバル変数で列車データと要素を保持
+    let currentTrains = [];
+    let trainElems = null;
 
-      const trainElems = svg.selectAll(".train").data(trains).enter().append("g").attr("class","train").attr("transform","translate(-100,-100)");
-      const iconGroup = trainElems.append("g").attr("class", "icon-group").attr("transform", "translate(0, 0)");
-      trainElems.append("text").attr("class", "train-info-text").attr("x", 0).attr("y", 20).text(d => d.id); // 下テキストのy座標を微調整
+    // 【新設】CSVを読み込んで列車要素を生成・更新する関数
+    function loadScheduleCSV(csvFileName) {
+      d3.csv(csvFileName).then(data => {
+        // 既存の列車描写要素があれば消去
+        svg.selectAll(".train").remove();
 
-      function updateIcons() {
-        iconGroup.each(function(d) {
-          const g = d3.select(this); const iconList = [];
-          const info1 = getFormationInfo(d, 1, currentAssignments); if (info1) iconList.push(info1);
-          const info2 = getFormationInfo(d, 2, currentAssignments); if (info2) iconList.push(info2);
-          const info3 = getFormationInfo(d, 3, currentAssignments); if (info3) iconList.push(info3);
-          
-          // 【変更】横並びの間隔を少し狭く調整
-          const iconSize = 30;     // アイコンの大きさ
-          const iconSpacing =1;   // アイコン同士の間隔
-          const totalWidth = iconList.length * iconSize + (iconList.length - 1) * iconSpacing;
-          
-          const itemGroups = g.selectAll("g.icon-item").data(iconList);
-          const itemGroupsEnter = itemGroups.enter().append("g").attr("class", "icon-item");
-          itemGroupsEnter.append("image"); itemGroupsEnter.append("text").attr("class", "train-info-text");
-          
-          const itemGroupsUpdate = itemGroupsEnter.merge(itemGroups).attr("transform", (info, idx) => { 
-            const xPos = idx * (iconSize + iconSpacing) - totalWidth / 2; 
-            return `translate(${xPos}, -10)`; // 上下の位置も少し詰める
+        currentTrains = data.map(row => {
+          const schedule = {};
+          Object.keys(row).forEach(k => {
+            if (k!=="train_id" && k!=="train_name" && k!=="direction" && k!=="train_formation1" && k!=="train_formation2" && k!=="train_formation3") {
+              schedule[k] = parseTime(row[k]);
+            }
           });
           
-          itemGroupsUpdate.select("image").attr("xlink:href", info => info.src).attr("width", iconSize).attr("height", iconSize);
-          itemGroupsUpdate.select("text").attr("x", iconSize / 2).attr("y", -6).text(info => info.text);
-          itemGroups.exit().remove();
+          return { 
+            id: row.train_id, 
+            name: row.train_name, 
+            dir: row.direction, 
+            formation1: row.train_formation1 ? row.train_formation1.trim() : "", 
+            formation2: row.train_formation2 ? row.train_formation2.trim() : "", 
+            formation3: row.train_formation3 ? row.train_formation3.trim() : "", 
+            schedule: schedule 
+          };
         });
-      }
 
-      // 初期更新
+        trainElems = svg.selectAll(".train").data(currentTrains).enter().append("g").attr("class","train").attr("transform","translate(-100,-100)");
+        const iconGroup = trainElems.append("g").attr("class", "icon-group").attr("transform", "translate(0, 0)");
+        trainElems.append("text").attr("class", "train-info-text").attr("x", 0).attr("y", 20).text(d => d.id);
+
+        updateIcons();
+      }).catch(err => {
+        console.error("CSVファイルの読み込みに失敗しました:", csvFileName, err);
+      });
+    }
+
+    // アイコン更新処理
+    function updateIcons() {
+      if (!trainElems) return;
+
+      trainElems.select(".icon-group").each(function(d) {
+        const g = d3.select(this); const iconList = [];
+        const info1 = getFormationInfo(d, 1, currentAssignments); if (info1) iconList.push(info1);
+        const info2 = getFormationInfo(d, 2, currentAssignments); if (info2) iconList.push(info2);
+        const info3 = getFormationInfo(d, 3, currentAssignments); if (info3) iconList.push(info3);
+        
+        // 💡【マップ上の画像サイズ】変更する場合はここ（20）と下の (-10) を調整
+        const iconSize = 20;     
+        const iconSpacing = 2;   
+        const totalWidth = iconList.length * iconSize + (iconList.length - 1) * iconSpacing;
+        
+        const itemGroups = g.selectAll("g.icon-item").data(iconList);
+        const itemGroupsEnter = itemGroups.enter().append("g").attr("class", "icon-item");
+        itemGroupsEnter.append("image"); itemGroupsEnter.append("text").attr("class", "train-info-text");
+        
+        const itemGroupsUpdate = itemGroupsEnter.merge(itemGroups).attr("transform", (info, idx) => { 
+          const xPos = idx * (iconSize + iconSpacing) - totalWidth / 2; 
+          return `translate(${xPos}, -10)`; 
+        });
+        
+        itemGroupsUpdate.select("image").attr("xlink:href", info => info.src).attr("width", iconSize).attr("height", iconSize);
+        itemGroupsUpdate.select("text").attr("x", iconSize / 2).attr("y", -6).text(info => info.text);
+        itemGroups.exit().remove();
+      });
+    }
+
+    // 初期実行（デフォルトは weekday.csv）
+    loadScheduleCSV(d3.select("#schedule-select").property("value"));
+    updateUnyoListHTML();
+
+    // 【新設】ダイヤ切り替え時の処理
+    d3.select("#schedule-select").on("change", function() {
+      const selectedCSV = d3.select(this).property("value");
+      loadScheduleCSV(selectedCSV);
+    });
+
+    // 運用投稿ボタン処理
+    d3.select("#post-btn").on("click", () => {
+      const selectedUnyo = d3.select("#unyo-select").property("value");
+      const selectedTrain = d3.select("#train-select").property("value");
+      currentAssignments[selectedUnyo] = selectedTrain;
+      localStorage.setItem("unyo_assignments", JSON.stringify(currentAssignments));
+      
       updateIcons();
       updateUnyoListHTML();
+    });
 
-      // 運用投稿ボタン処理
-      d3.select("#post-btn").on("click", () => {
-        const selectedUnyo = d3.select("#unyo-select").property("value");
-        const selectedTrain = d3.select("#train-select").property("value");
-        currentAssignments[selectedUnyo] = selectedTrain;
-        localStorage.setItem("unyo_assignments", JSON.stringify(currentAssignments));
-        
-        updateIcons();
-        updateUnyoListHTML(); // 一覧側も即時反映
-      });
+    // 運用一覧ボタンの開閉トグル処理
+    d3.select("#toggle-list-btn").on("click", () => {
+      const modal = d3.select("#unyo-list-modal");
+      const isVisible = modal.style("display") === "block";
+      modal.style("display", isVisible ? "none" : "block");
+    });
 
-      // 【新設】運用一覧ボタンの開閉トグル処理
-      d3.select("#toggle-list-btn").on("click", () => {
-        const modal = d3.select("#unyo-list-modal");
-        const isVisible = modal.style("display") === "block";
-        modal.style("display", isVisible ? "none" : "block");
-      });
+    const coords = {};
+    [...mainCoords,...branchCoords].forEach(d=>coords[d.name]=d);
 
-      const coords = {};
-      [...mainCoords,...branchCoords].forEach(d=>coords[d.name]=d);
+    let lastCheckedDate = getTodayString();
 
-      let lastCheckedDate = getTodayString();
+    const realtimeCheckbox = d3.select("#realtime-checkbox");
+    const timeInput = d3.select("#target-time-input");
 
-      const realtimeCheckbox = d3.select("#realtime-checkbox");
-      const timeInput = d3.select("#target-time-input");
+    timeInput.on("input", () => { realtimeCheckbox.property("checked", false); });
 
-      timeInput.on("input", () => { realtimeCheckbox.property("checked", false); });
+    // 更新ループ
+    setInterval(()=>{
+      const now = new Date();
+      const isRealtime = realtimeCheckbox.property("checked");
+      let nowM = 0;
 
-      // 更新ループ
-      setInterval(()=>{
-        const now = new Date();
-        const isRealtime = realtimeCheckbox.property("checked");
-        let nowM = 0;
+      if (isRealtime) {
+        nowM = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mm = String(now.getMinutes()).padStart(2, '0');
+        timeInput.property("value", `${hh}:${mm}`);
+      } else {
+        const timeVal = timeInput.property("value");
+        if (timeVal) { const [hh, mm] = timeVal.split(":").map(Number); nowM = hh * 60 + mm; } 
+        else { nowM = now.getHours() * 60 + now.getMinutes(); }
+      }
 
-        if (isRealtime) {
-          nowM = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
-          const hh = String(now.getHours()).padStart(2, '0');
-          const mm = String(now.getMinutes()).padStart(2, '0');
-          timeInput.property("value", `${hh}:${mm}`);
-        } else {
-          const timeVal = timeInput.property("value");
-          if (timeVal) { const [hh, mm] = timeVal.split(":").map(Number); nowM = hh * 60 + mm; } 
-          else { nowM = now.getHours() * 60 + now.getMinutes(); }
-        }
+      const todayStr = getTodayString();
+      if (todayStr !== lastCheckedDate) { 
+        currentAssignments = loadUnyoData(); 
+        updateIcons(); 
+        updateUnyoListHTML();
+        lastCheckedDate = todayStr; 
+      }
 
-        const todayStr = getTodayString();
-        if (todayStr !== lastCheckedDate) { 
-          currentAssignments = loadUnyoData(); 
-          updateIcons(); 
-          updateUnyoListHTML();
-          lastCheckedDate = todayStr; 
-        }
-
-        // 列車位置の再計算
-        trains.forEach((train,i)=>{
+      // 列車位置の再計算（CSV読み込み完了後のみ実行）
+      if (currentTrains && trainElems) {
+        currentTrains.forEach((train,i)=>{
           const stops = Object.entries(train.schedule).filter(([st,t])=>t!=null);
           stops.sort((a,b)=>a[1]-b[1]);
           let pos=null;
@@ -404,8 +459,8 @@
           if (pos){ trainElems.filter((d,idx)=>idx===i).attr("transform",`translate(${pos.x},${pos.y})`); } 
           else { trainElems.filter((d,idx)=>idx===i).attr("transform","translate(-100,-100)"); }
         });
-      },1000);
-    });
+      }
+    },1000);
   </script>
 </body>
 </html>
