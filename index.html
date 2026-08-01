@@ -281,7 +281,7 @@
     }
 
     // 列車読み込み
-    d3.csv("trains.csv").then(data=>{
+    d3.csv("weekday.csv").then(data=>{
       const trains = data.map(row=>{
         const schedule = {};
         Object.keys(row).forEach(k=>{ if (k!=="train_id" && k!=="train_name" && k!=="direction" && k!=="train_formation1" && k!=="train_formation2" && k!=="train_formation3") { schedule[k] = parseTime(row[k]); } });
