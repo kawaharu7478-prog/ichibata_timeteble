@@ -64,10 +64,10 @@
       font-weight: bold;
     }
     .unyo-list-label {
-      width: 50px;
+      width: 60px;
     }
 
-    /* 💡【運用一覧内の画像サイズ】変更する場合はここ（20px）を調整 */
+    /* 運用一覧内の画像サイズ */
     .unyo-list-img {
       width: 20px;
       height: 20px;
@@ -151,7 +151,7 @@
       cursor: pointer;
     }
 
-    /* 【新設】ダイヤ選択プルダウンのスタイル */
+    /* ダイヤ選択プルダウンのスタイル */
     #schedule-select {
       padding: 8px 12px;
       font-size: 14px;
@@ -168,19 +168,8 @@
   <!-- 運用投稿UI -->
   <div id="post-container">
     <label for="unyo-select">運用:</label>
-    <select id="unyo-select">
-      <option value="A">A</option>
-      <option value="B">B</option>
-      <option value="C">C</option>
-      <option value="D出">D出</option>
-      <option value="D中">D中</option>
-      <option value="D畑">D畑</option>
-      <option value="E">E</option>
-      <option value="F">F</option>
-      <option value="G">G</option>
-      <option value="H">H</option>
-      <option value="I">I</option>
-    </select>
+    <!-- 【変更】プルダウンの中身はCSVから動的に自動生成します -->
+    <select id="unyo-select"></select>
 
     <label for="train-select">車両:</label>
     <select id="train-select">
@@ -222,7 +211,7 @@
       <input type="time" id="target-time-input" class="time-input">
     </div>
 
-    <!-- 【新設】ダイヤ種別選択プルダウン -->
+    <!-- ダイヤ種別選択プルダウン -->
     <select id="schedule-select">
       <option value="weekday.csv">平日</option>
       <option value="holiday.csv">土休日</option>
@@ -241,8 +230,8 @@
     const svg = d3.select("#map");
     const height = +svg.attr("height");
 
-    // 全運用リスト（一覧描画用）
-    const unyoListKeys = ["A", "B", "C", "D出", "D中", "D畑", "E", "F", "G", "H", "I"];
+    // CSVから抽出した「現在利用可能な運用記号のリスト」を保持する変数
+    let dynamicUnyoKeys = [];
 
     // 駅定義・座標計算
     const mainStations = [
@@ -291,12 +280,12 @@
       return { src: srcFile, text: unyoKey };
     }
 
-    // HTML側の「運用一覧」テキストエリアを更新する関数
+    // HTML側の「運用一覧」エリアを更新する関数
     function updateUnyoListHTML() {
       const container = d3.select("#unyo-list-content");
       container.html("");
 
-      unyoListKeys.forEach(unyo => {
+      dynamicUnyoKeys.forEach(unyo => {
         const trainNum = currentAssignments[unyo] || "不明";
         const imgSrc = trainNum !== "不明" ? trainNum + ".png" : "0000.png";
 
@@ -307,15 +296,27 @@
       });
     }
 
+    // 【新設】運用選択プルダウン（#unyo-select）の選択肢を更新する関数
+    function updateUnyoSelectOptions() {
+      const select = d3.select("#unyo-select");
+      select.html(""); // 一旦選択肢をクリア
+
+      dynamicUnyoKeys.forEach(unyo => {
+        select.append("option").attr("value", unyo).text(unyo);
+      });
+    }
+
     // グローバル変数で列車データと要素を保持
     let currentTrains = [];
     let trainElems = null;
 
-    // 【新設】CSVを読み込んで列車要素を生成・更新する関数
+    // CSVを読み込んで列車要素生成＆運用記号の自動判別を行う関数
     function loadScheduleCSV(csvFileName) {
       d3.csv(csvFileName).then(data => {
-        // 既存の列車描写要素があれば消去
+        // 既存の列車描写要素をクリア
         svg.selectAll(".train").remove();
+
+        const unyoSet = new Set(); // 重複を防ぐためのSetオブジェクト
 
         currentTrains = data.map(row => {
           const schedule = {};
@@ -324,18 +325,35 @@
               schedule[k] = parseTime(row[k]);
             }
           });
-          
+
+          const f1 = row.train_formation1 ? row.train_formation1.trim() : "";
+          const f2 = row.train_formation2 ? row.train_formation2.trim() : "";
+          const f3 = row.train_formation3 ? row.train_formation3.trim() : "";
+
+          // CSV内に記載されている運用記号を自動抽出してリストに追加
+          if (f1) unyoSet.add(f1);
+          if (f2) unyoSet.add(f2);
+          if (f3) unyoSet.add(f3);
+
           return { 
             id: row.train_id, 
             name: row.train_name, 
             dir: row.direction, 
-            formation1: row.train_formation1 ? row.train_formation1.trim() : "", 
-            formation2: row.train_formation2 ? row.train_formation2.trim() : "", 
-            formation3: row.train_formation3 ? row.train_formation3.trim() : "", 
+            formation1: f1, 
+            formation2: f2, 
+            formation3: f3, 
             schedule: schedule 
           };
         });
 
+        // 抽出した運用記号を五十音・アルファベット順にソートして保持
+        dynamicUnyoKeys = Array.from(unyoSet).sort((a, b) => a.localeCompare(b, 'ja'));
+
+        // プルダウンと運用一覧の表示を更新
+        updateUnyoSelectOptions();
+        updateUnyoListHTML();
+
+        // 路線図上の列車描画要素を作成
         trainElems = svg.selectAll(".train").data(currentTrains).enter().append("g").attr("class","train").attr("transform","translate(-100,-100)");
         const iconGroup = trainElems.append("g").attr("class", "icon-group").attr("transform", "translate(0, 0)");
         trainElems.append("text").attr("class", "train-info-text").attr("x", 0).attr("y", 20).text(d => d.id);
@@ -355,21 +373,20 @@
         const info1 = getFormationInfo(d, 1, currentAssignments); if (info1) iconList.push(info1);
         const info2 = getFormationInfo(d, 2, currentAssignments); if (info2) iconList.push(info2);
         const info3 = getFormationInfo(d, 3, currentAssignments); if (info3) iconList.push(info3);
-        
-        // 💡【マップ上の画像サイズ】変更する場合はここ（20）と下の (-10) を調整
+
         const iconSize = 20;     
         const iconSpacing = 2;   
         const totalWidth = iconList.length * iconSize + (iconList.length - 1) * iconSpacing;
-        
+
         const itemGroups = g.selectAll("g.icon-item").data(iconList);
         const itemGroupsEnter = itemGroups.enter().append("g").attr("class", "icon-item");
         itemGroupsEnter.append("image"); itemGroupsEnter.append("text").attr("class", "train-info-text");
-        
+
         const itemGroupsUpdate = itemGroupsEnter.merge(itemGroups).attr("transform", (info, idx) => { 
           const xPos = idx * (iconSize + iconSpacing) - totalWidth / 2; 
           return `translate(${xPos}, -10)`; 
         });
-        
+
         itemGroupsUpdate.select("image").attr("xlink:href", info => info.src).attr("width", iconSize).attr("height", iconSize);
         itemGroupsUpdate.select("text").attr("x", iconSize / 2).attr("y", -6).text(info => info.text);
         itemGroups.exit().remove();
@@ -378,9 +395,8 @@
 
     // 初期実行（デフォルトは weekday.csv）
     loadScheduleCSV(d3.select("#schedule-select").property("value"));
-    updateUnyoListHTML();
 
-    // 【新設】ダイヤ切り替え時の処理
+    // ダイヤ切り替え時の処理
     d3.select("#schedule-select").on("change", function() {
       const selectedCSV = d3.select(this).property("value");
       loadScheduleCSV(selectedCSV);
@@ -390,9 +406,11 @@
     d3.select("#post-btn").on("click", () => {
       const selectedUnyo = d3.select("#unyo-select").property("value");
       const selectedTrain = d3.select("#train-select").property("value");
+      if (!selectedUnyo) return;
+
       currentAssignments[selectedUnyo] = selectedTrain;
       localStorage.setItem("unyo_assignments", JSON.stringify(currentAssignments));
-      
+
       updateIcons();
       updateUnyoListHTML();
     });
